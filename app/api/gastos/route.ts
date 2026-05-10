@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions, type AuthUser } from "@/lib/auth"
+import { authOptions } from "@/lib/auth"
 import { db, ensureSchema } from "@/lib/db"
 import { parseGasto } from "@/lib/parseGasto"
 
@@ -9,7 +9,7 @@ export async function GET() {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const userId = (session.user as AuthUser)?.id
+    const userId = session.user?.id
     if (!userId) {
       return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
     }
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const userId = (session.user as AuthUser)?.id
+    const userId = session.user?.id
     if (!userId) {
       return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
     }
@@ -80,7 +80,7 @@ export async function DELETE() {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const userId = (session.user as AuthUser)?.id
+    const userId = session.user?.id
     if (!userId) {
       return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
     }

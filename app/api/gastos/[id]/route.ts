@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
-import { authOptions, type AuthUser } from "@/lib/auth"
+import { authOptions } from "@/lib/auth"
 import { db, ensureSchema } from "@/lib/db"
 import { parseGasto } from "@/lib/parseGasto"
 
@@ -15,7 +15,7 @@ export async function DELETE(
 
   const result = await db.execute({
     sql: "DELETE FROM gastos WHERE id = ? AND user_id = ?",
-    args: [params.id, (session.user as AuthUser)?.id],
+    args: [params.id, session.user?.id],
   })
 
   if (result.rowsAffected === 0) {
@@ -50,7 +50,7 @@ export async function PATCH(
 
   const result = await db.execute({
     sql: "UPDATE gastos SET raw = ?, descripcion = ?, categoria = ?, monto = ?, tipo = ? WHERE id = ? AND user_id = ?",
-    args: [raw, parsed.descripcion, parsed.categoria, parsed.monto, tipo, params.id, (session.user as AuthUser)?.id],
+    args: [raw, parsed.descripcion, parsed.categoria, parsed.monto, tipo, params.id, session.user?.id],
   })
 
   if (result.rowsAffected === 0) {

@@ -1,6 +1,14 @@
 import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 
+export type AuthUser = {
+  id?: string
+  googleId?: string
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({

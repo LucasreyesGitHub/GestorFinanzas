@@ -14,6 +14,7 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const userId = (session.user as SessionUser)?.id
+  if (!userId) return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
 
   await ensureSchema()
 
@@ -37,6 +38,7 @@ export async function PATCH(
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
   const userId = (session.user as SessionUser)?.id
+  if (!userId) return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
 
   const body = await request.json().catch(() => null)
   const raw = typeof body?.raw === "string" ? body.raw.trim() : ""

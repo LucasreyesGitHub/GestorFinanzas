@@ -4,12 +4,14 @@ import { authOptions } from "@/lib/auth"
 import { db, ensureSchema } from "@/lib/db"
 import { parseGasto } from "@/lib/parseGasto"
 
+type SessionUser = { id?: string; name?: string | null; email?: string | null; image?: string | null }
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const userId = session.user?.id
+    const userId = (session.user as SessionUser)?.id
     if (!userId) {
       return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
     }
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const userId = session.user?.id
+    const userId = (session.user as SessionUser)?.id
     if (!userId) {
       return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
     }
@@ -61,15 +63,7 @@ export async function POST(request: Request) {
       args: [id, userId, raw, parsed.descripcion, parsed.categoria, parsed.monto, tipo, created_at],
     })
 
-    return NextResponse.json({
-      id,
-      raw,
-      descripcion: parsed.descripcion,
-      categoria: parsed.categoria,
-      monto: parsed.monto,
-      tipo,
-      created_at,
-    })
+    return NextResponse.json({ id, raw, descripcion: parsed.descripcion, categoria: parsed.categoria, monto: parsed.monto, tipo, created_at })
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })
   }
@@ -80,7 +74,7 @@ export async function DELETE() {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-    const userId = session.user?.id
+    const userId = (session.user as SessionUser)?.id
     if (!userId) {
       return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
     }

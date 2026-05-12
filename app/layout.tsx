@@ -25,6 +25,10 @@ export const metadata: Metadata = {
     title: "Finanzas",
     statusBarStyle: "black-translucent",
   },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+  },
   formatDetection: { telephone: false },
 }
 

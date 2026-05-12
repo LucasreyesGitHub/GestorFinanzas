@@ -5,13 +5,13 @@ import { IconLeaf } from "@/components/Icons"
 
 export default function LoginPage() {
   return (
-    <main className="grain min-h-screen bg-ink-900 flex items-center justify-center p-4">
+    <main className="grain min-h-screen bg-ink-900 flex items-center justify-center p-4 overflow-hidden">
 
       {/* Fondo decorativo */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sage-900 opacity-30 blur-3xl" />
-        <div className="absolute -bottom-48 -right-24 w-[500px] h-[500px] rounded-full bg-sage-700 opacity-10 blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full bg-gold-500 opacity-5 blur-3xl" />
+        <div className="absolute -top-32 -left-32 w-72 h-72 rounded-full bg-sage-900 opacity-30 blur-3xl sm:w-96 sm:h-96" />
+        <div className="absolute -bottom-48 -right-24 w-72 h-72 rounded-full bg-sage-700 opacity-10 blur-3xl sm:w-[500px] sm:h-[500px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 rounded-full bg-gold-500 opacity-5 blur-3xl sm:w-72 sm:h-72" />
       </div>
 
       <div className="relative w-full max-w-sm">

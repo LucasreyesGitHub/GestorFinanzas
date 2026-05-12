@@ -2,9 +2,9 @@ import Link from "next/link"
 
 export default function VerifyPage() {
   return (
-    <main className="grain min-h-screen bg-ink-900 flex items-center justify-center p-4">
+    <main className="grain min-h-screen bg-ink-900 flex items-center justify-center p-4 overflow-hidden">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sage-900 opacity-30 blur-3xl" />
+        <div className="absolute -top-32 -left-32 w-72 h-72 rounded-full bg-sage-900 opacity-30 blur-3xl sm:w-96 sm:h-96" />
       </div>
 
       <div className="relative w-full max-w-sm text-center animate-fade-up">

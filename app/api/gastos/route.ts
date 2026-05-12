@@ -43,9 +43,17 @@ export async function POST(request: Request) {
     const raw = typeof body?.raw === "string" ? body.raw.trim() : ""
     const tiposValidos = ["Gasto", "Ingreso", "Ahorro"]
     const tipo = tiposValidos.includes(body?.tipo) ? body.tipo : "Gasto"
+    const createdAtRaw = typeof body?.created_at === "string" ? body.created_at.trim() : ""
 
     if (!raw) {
       return NextResponse.json({ error: "Debe enviar una descripción o texto del gasto." }, { status: 400 })
+    }
+
+    if (createdAtRaw) {
+      const parsedDate = new Date(createdAtRaw)
+      if (isNaN(parsedDate.getTime())) {
+        return NextResponse.json({ error: "La fecha enviada no es válida." }, { status: 400 })
+      }
     }
 
     const parsed = parseGasto(raw)
@@ -56,7 +64,7 @@ export async function POST(request: Request) {
     await ensureSchema()
 
     const id = crypto.randomUUID()
-    const created_at = new Date().toISOString()
+    const created_at = createdAtRaw ? new Date(createdAtRaw).toISOString() : new Date().toISOString()
 
     await db.execute({
       sql: "INSERT INTO gastos (id, user_id, raw, descripcion, categoria, monto, tipo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

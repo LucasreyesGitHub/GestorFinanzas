@@ -49,7 +49,11 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
   const [rawInput, setRawInput] = useState("")
   const [tipo, setTipo] = useState("Gasto")
   const [tipoManual, setTipoManual] = useState(false)
+  const [manualDate, setManualDate] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSuccess, setImportSuccess] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -128,6 +132,99 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
     }
   }
 
+  function getSafeIsoDate(dateString: string) {
+    const date = new Date(dateString)
+    return isNaN(date.getTime()) ? null : date.toISOString()
+  }
+
+  function parseCsv(text: string) {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    if (lines.length <= 1) return []
+
+    const headers = lines[0].split(/[,;]/).map((header) => header.trim().toLowerCase())
+    return lines.slice(1).map((line) => {
+      const values = line.split(/[,;]/).map((value) => value.trim())
+      const row: Record<string, string> = {}
+      headers.forEach((header, index) => {
+        row[header] = values[index] ?? ""
+      })
+      return row
+    })
+  }
+
+  function downloadTemplate() {
+    const content = [
+      "raw,tipo,fecha",
+      "pagué $1200 de luz,Gasto,2024-04-02",
+      "cobré 4500 por sueldo,Ingreso,2024-04-25",
+      "deposité $5000 en plazo fijo,Ahorro,2026-01-15",
+    ].join("\n")
+    const blob = new Blob([content], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "finanzas-importacion.csv"
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    setImportError(null)
+    setImportSuccess(null)
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setImportError("Solo se aceptan archivos CSV (.csv) para importar datos.")
+      return
+    }
+
+    const content = await file.text()
+    const rows = parseCsv(content)
+    if (rows.length === 0) {
+      setImportError("El archivo CSV está vacío o el formato no es válido.")
+      return
+    }
+
+    const payloads = rows.map((row, index) => {
+      const raw = row.raw || row.texto || row.text || row.descripcion || ""
+      const tipo = ["Gasto", "Ingreso", "Ahorro"].includes((row.tipo || "").trim()) ? row.tipo.trim() : "Gasto"
+      const fecha = (row.fecha || "").trim()
+      const created_at = fecha ? getSafeIsoDate(fecha) : new Date().toISOString()
+
+      if (!raw) {
+        throw new Error(`Fila ${index + 2}: falta la descripción o el campo raw.`)
+      }
+      if (fecha && !created_at) {
+        throw new Error(`Fila ${index + 2}: la fecha no es válida.`)
+      }
+
+      return { raw, tipo, created_at }
+    })
+
+    setImporting(true)
+    try {
+      for (const payload of payloads) {
+        const res = await fetch("/api/gastos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => null)
+          throw new Error(body?.error || "No se pudo importar el CSV")
+        }
+      }
+      await fetchGastos()
+      setImportSuccess(`Se importaron ${payloads.length} movimientos correctamente.`)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Error inesperado durante la importación")
+    } finally {
+      setImporting(false)
+    }
+  }
+
   function handleTipoClick(nuevoTipo: string) {
     setTipo(nuevoTipo)
     setTipoManual(true)
@@ -142,16 +239,28 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
     }
     setSubmitting(true)
     try {
+      const payload: Record<string, unknown> = { raw: rawInput.trim(), tipo }
+      if (manualDate.trim()) {
+        const createdAt = getSafeIsoDate(manualDate.trim())
+        if (!createdAt) {
+          setError("La fecha ingresada no es válida.")
+          setSubmitting(false)
+          return
+        }
+        payload.created_at = createdAt
+      }
+
       const res = await fetch("/api/gastos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw: rawInput.trim(), tipo }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => null)
         throw new Error(body?.error || "No se pudo guardar la transacción")
       }
       setRawInput("")
+      setManualDate("")
       setTipoManual(false)
       await fetchGastos()
     } catch (err) {
@@ -268,6 +377,19 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
               className="input-base"
             />
 
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="rounded-3xl bg-ink-900/80 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-ink-400">Fecha</p>
+                <input
+                  type="date"
+                  value={manualDate}
+                  onChange={(event) => setManualDate(event.target.value)}
+                  className="mt-2 w-full rounded-3xl border border-white/10 bg-ink-950 px-3 py-3 text-sm text-ink-100 outline-none transition focus:border-sage-500"
+                />
+                <p className="mt-2 text-xs text-ink-400">Dejar vacío para usar la fecha actual.</p>
+              </label>
+            </div>
+
             <div className="flex gap-2">
               {["Gasto", "Ingreso", "Ahorro"].map((t) => (
                 <button
@@ -323,6 +445,38 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
             </button>
           </form>
         </div>
+      </section>
+
+      <section className="glass-card p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-display text-xl text-ink-100">Importar gastos</h3>
+            <p className="mt-2 text-ink-400 text-sm">Subí un CSV para cargar historiales de meses o años anteriores.</p>
+          </div>
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-ink-100 transition hover:bg-white/10"
+          >
+            Descargar plantilla
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-[1fr_auto]">
+          <label className="flex items-center gap-3 rounded-3xl border border-white/10 bg-ink-900/80 px-4 py-3 text-sm text-ink-200 transition hover:border-sage-500/40">
+            <span>Seleccionar CSV</span>
+            <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+          </label>
+          <div className="rounded-3xl bg-ink-900/80 p-4 text-sm text-ink-400">
+            <p className="font-semibold text-ink-100">Formato esperado</p>
+            <p className="mt-2">raw,tipo,fecha</p>
+            <p className="mt-1">Ej: pagué $1200 de luz,Gasto,2024-04-02</p>
+          </div>
+        </div>
+
+        {importError ? <p className="mt-4 text-sm text-gold-300">{importError}</p> : null}
+        {importSuccess ? <p className="mt-4 text-sm text-sage-300">{importSuccess}</p> : null}
+        {importing ? <p className="mt-4 text-sm text-ink-300">Importando movimientos…</p> : null}
       </section>
 
       <section className="glass-card p-6">

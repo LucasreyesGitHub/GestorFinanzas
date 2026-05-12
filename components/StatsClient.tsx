@@ -29,7 +29,7 @@ type Gasto = {
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value)
 
-const filters = ["Día", "Semana", "Mes"]
+const filters = ["Día", "Semana", "Mes", "Año", "Todo"]
 
 export function StatsClient() {
   const [gastos, setGastos] = useState<Gasto[]>([])
@@ -47,24 +47,50 @@ export function StatsClient() {
     load()
   }, [])
 
-  const days = useMemo(() => {
+  const periodDays = useMemo(() => {
     if (selectedFilter === "Día") return 1
     if (selectedFilter === "Mes") return 30
+    if (selectedFilter === "Año") return 365
     return 7
   }, [selectedFilter])
 
+  const chartLabel = useMemo(() => {
+    if (selectedFilter === "Año") return "Últimos 12 meses"
+    if (selectedFilter === "Todo") return "Últimos 24 meses"
+    return `Últimos ${periodDays} días`
+  }, [selectedFilter, periodDays])
+
   const filteredGastos = useMemo(() => {
+    if (selectedFilter === "Todo") return gastos
     const cutoff = new Date()
-    cutoff.setDate(cutoff.getDate() - (days - 1))
+    cutoff.setDate(cutoff.getDate() - (periodDays - 1))
     cutoff.setHours(0, 0, 0, 0)
     return gastos.filter((g) => new Date(g.created_at) >= cutoff)
-  }, [gastos, days])
+  }, [gastos, periodDays, selectedFilter])
 
   const chartData = useMemo(() => {
+    if (selectedFilter === "Año" || selectedFilter === "Todo") {
+      const monthlyTotals: Record<string, { label: string; amount: number }> = {}
+      filteredGastos.forEach((g) => {
+        const date = new Date(g.created_at)
+        if (isNaN(date.getTime())) return
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+        const label = date.toLocaleDateString("es-AR", { month: "short", year: "numeric" })
+        if (!monthlyTotals[monthKey]) {
+          monthlyTotals[monthKey] = { label, amount: 0 }
+        }
+        monthlyTotals[monthKey].amount += g.tipo === "Ingreso" ? g.monto : -g.monto
+      })
+      const sorted = Object.entries(monthlyTotals)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, value]) => value)
+      return selectedFilter === "Año" ? sorted.slice(-12) : sorted.slice(-24)
+    }
+
     const today = new Date()
-    return Array.from({ length: days }, (_, index) => {
+    return Array.from({ length: periodDays }, (_, index) => {
       const date = new Date(today)
-      date.setDate(today.getDate() - (days - 1 - index))
+      date.setDate(today.getDate() - (periodDays - 1 - index))
       const label =
         selectedFilter === "Mes"
           ? date.toLocaleDateString("es-AR", { day: "numeric" })
@@ -74,7 +100,7 @@ export function StatsClient() {
         .reduce((sum, g) => sum + (g.tipo === "Ingreso" ? g.monto : -g.monto), 0)
       return { label, amount }
     })
-  }, [filteredGastos, days, selectedFilter])
+  }, [filteredGastos, periodDays, selectedFilter])
 
   const categoryData = useMemo(() => {
     const totals: Record<string, number> = {}
@@ -208,7 +234,7 @@ export function StatsClient() {
               <p className="text-sm uppercase tracking-[0.24em] text-ink-400">Balance</p>
               <h3 className="mt-2 text-2xl font-semibold text-ink-100">Evolución del balance</h3>
             </div>
-            <p className="text-sm text-ink-400">Últimos {days} días</p>
+            <p className="text-sm text-ink-400">{chartLabel}</p>
           </div>
           <div className="mt-6 h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -252,7 +278,7 @@ export function StatsClient() {
             <p className="text-sm uppercase tracking-[0.24em] text-ink-400">Gastos</p>
             <h3 className="mt-2 text-2xl font-semibold text-ink-100">Gastos por día</h3>
           </div>
-          <p className="text-sm text-ink-400">Últimos {days} días</p>
+          <p className="text-sm text-ink-400">{chartLabel}</p>
         </div>
         <div className="mt-6 h-72">
           <ResponsiveContainer width="100%" height="100%">

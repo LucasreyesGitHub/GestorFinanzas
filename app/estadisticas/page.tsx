@@ -10,7 +10,7 @@ export default async function EstadisticasPage() {
 
   return (
     <AppShell>
-      <main className="mx-auto max-w-6xl space-y-8 px-0 py-6 lg:px-0">
+      <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
         <StatsClient />
       </main>
     </AppShell>

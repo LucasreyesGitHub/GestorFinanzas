@@ -24,5 +24,12 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_gastos_user_id ON gastos(user_id);
   `)
 
+  for (const sql of [
+    "ALTER TABLE gastos ADD COLUMN subcategoria TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE gastos ADD COLUMN moneda TEXT NOT NULL DEFAULT 'UY'",
+  ]) {
+    try { await db.execute(sql) } catch { /* column already exists */ }
+  }
+
   schemaInitialized = true
 }

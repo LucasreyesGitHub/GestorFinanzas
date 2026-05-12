@@ -138,12 +138,14 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
   }
 
   function parseCsv(text: string) {
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    const stripped = text.replace(/^﻿/, "")
+    const lines = stripped.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
     if (lines.length <= 1) return []
 
-    const headers = lines[0].split(/[,;]/).map((header) => header.trim().toLowerCase())
+    const unquote = (s: string) => s.replace(/^"|"$/g, "").trim()
+    const headers = lines[0].split(/[,;]/).map((h) => unquote(h).toLowerCase())
     return lines.slice(1).map((line) => {
-      const values = line.split(/[,;]/).map((value) => value.trim())
+      const values = line.split(/[,;]/).map(unquote)
       const row: Record<string, string> = {}
       headers.forEach((header, index) => {
         row[header] = values[index] ?? ""
@@ -159,7 +161,7 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
       "cobré 4500 por sueldo,Ingreso,2024-04-25",
       "deposité $5000 en plazo fijo,Ahorro,2026-01-15",
     ].join("\n")
-    const blob = new Blob([content], { type: "text/csv" })
+    const blob = new Blob(["﻿" + content], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement("a")
     anchor.href = url
@@ -477,6 +479,16 @@ export function DashboardClient({ userEmail }: { userEmail: string }) {
         {importError ? <p className="mt-4 text-sm text-gold-300">{importError}</p> : null}
         {importSuccess ? <p className="mt-4 text-sm text-sage-300">{importSuccess}</p> : null}
         {importing ? <p className="mt-4 text-sm text-ink-300">Importando movimientos…</p> : null}
+
+        <div className="mt-6 border-t border-white/10 pt-6">
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="rounded-3xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400 transition hover:bg-red-500/20"
+          >
+            Borrar todos los registros
+          </button>
+        </div>
       </section>
 
       <section className="glass-card p-6">

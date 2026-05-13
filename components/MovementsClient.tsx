@@ -12,6 +12,7 @@ type Gasto = {
   tipo: string
   moneda: string
   created_at: string
+  es_transferencia: number
 }
 
 type DateFilter = "Todos" | "Día" | "Semana" | "Mes" | "Año"
@@ -278,13 +279,12 @@ export function MovementsClient() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{g.moneda || "UY"}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {g.tipo === "Ingreso" ? (
-                        <span className="badge-ingreso">Ingreso</span>
-                      ) : g.tipo === "Ahorro" ? (
-                        <span className="badge-ahorro">Ahorro</span>
-                      ) : (
-                        <span className="badge-gasto">Gasto</span>
-                      )}
+                      {g.es_transferencia
+                        ? <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">Transferencia</span>
+                        : g.tipo === "Ingreso" ? <span className="badge-ingreso">Ingreso</span>
+                        : g.tipo === "Ahorro"  ? <span className="badge-ahorro">Ahorro</span>
+                        : <span className="badge-gasto">Gasto</span>
+                      }
                     </td>
                     <td className="px-4 py-3">
                       <button

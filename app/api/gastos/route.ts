@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     const createdAtRaw = typeof body?.created_at === "string" ? body.created_at.trim() : ""
     const subcategoria = typeof body?.subcategoria === "string" ? body.subcategoria.trim() : ""
     const moneda = typeof body?.moneda === "string" ? body.moneda.trim() : "UY"
+    const cuenta_id = typeof body?.cuenta_id === "string" ? body.cuenta_id.trim() : ""
 
     if (createdAtRaw) {
       const parsedDate = new Date(createdAtRaw)
@@ -67,10 +68,10 @@ export async function POST(request: Request) {
         : `pagué $${directMonto} de ${descripcion}`
 
       await db.execute({
-        sql: "INSERT INTO gastos (id, user_id, raw, descripcion, categoria, subcategoria, monto, tipo, moneda, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        args: [id, userId, raw, descripcion, directCategoria, subcategoria, directMonto, tipo, moneda, created_at],
+        sql: "INSERT INTO gastos (id, user_id, raw, descripcion, categoria, subcategoria, monto, tipo, moneda, created_at, cuenta_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        args: [id, userId, raw, descripcion, directCategoria, subcategoria, directMonto, tipo, moneda, created_at, cuenta_id],
       })
-      return NextResponse.json({ id, raw, descripcion, categoria: directCategoria, subcategoria, monto: directMonto, tipo, moneda, created_at })
+      return NextResponse.json({ id, raw, descripcion, categoria: directCategoria, subcategoria, monto: directMonto, tipo, moneda, created_at, cuenta_id })
     }
 
     // Natural language insert (existing behavior)
@@ -81,10 +82,10 @@ export async function POST(request: Request) {
     if (parsed.monto === null) return NextResponse.json({ error: "No se pudo detectar el monto en el texto." }, { status: 400 })
 
     await db.execute({
-      sql: "INSERT INTO gastos (id, user_id, raw, descripcion, categoria, subcategoria, monto, tipo, moneda, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [id, userId, raw, parsed.descripcion, parsed.categoria, subcategoria, parsed.monto, tipo, moneda, created_at],
+      sql: "INSERT INTO gastos (id, user_id, raw, descripcion, categoria, subcategoria, monto, tipo, moneda, created_at, cuenta_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [id, userId, raw, parsed.descripcion, parsed.categoria, subcategoria, parsed.monto, tipo, moneda, created_at, cuenta_id],
     })
-    return NextResponse.json({ id, raw, descripcion: parsed.descripcion, categoria: parsed.categoria, subcategoria, monto: parsed.monto, tipo, moneda, created_at })
+    return NextResponse.json({ id, raw, descripcion: parsed.descripcion, categoria: parsed.categoria, subcategoria, monto: parsed.monto, tipo, moneda, created_at, cuenta_id })
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })
   }

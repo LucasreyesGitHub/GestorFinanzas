@@ -27,8 +27,21 @@ export async function ensureSchema() {
   for (const sql of [
     "ALTER TABLE gastos ADD COLUMN subcategoria TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE gastos ADD COLUMN moneda TEXT NOT NULL DEFAULT 'UY'",
+    "ALTER TABLE gastos ADD COLUMN cuenta_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE gastos ADD COLUMN es_transferencia INTEGER NOT NULL DEFAULT 0",
+    `CREATE TABLE IF NOT EXISTS cuentas (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      banco TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'Caja de Ahorro',
+      moneda TEXT NOT NULL DEFAULT 'UY',
+      saldo_inicial REAL NOT NULL DEFAULT 0,
+      orden INTEGER NOT NULL DEFAULT 0
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_cuentas_user_id ON cuentas(user_id)",
   ]) {
-    try { await db.execute(sql) } catch { /* column already exists */ }
+    try { await db.execute(sql) } catch { /* already exists */ }
   }
 
   schemaInitialized = true

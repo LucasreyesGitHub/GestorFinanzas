@@ -41,6 +41,19 @@ export async function PATCH(
   if (!userId) return NextResponse.json({ error: "Usuario no identificado" }, { status: 401 })
 
   const body = await request.json().catch(() => null)
+
+  await ensureSchema()
+
+  // Mark/unmark as internal transfer
+  if (typeof body?.es_transferencia === "number") {
+    const result = await db.execute({
+      sql: "UPDATE gastos SET es_transferencia = ? WHERE id = ? AND user_id = ?",
+      args: [body.es_transferencia ? 1 : 0, params.id, userId],
+    })
+    if (result.rowsAffected === 0) return NextResponse.json({ error: "No encontrado." }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  }
+
   const raw = typeof body?.raw === "string" ? body.raw.trim() : ""
   const tiposValidos = ["Gasto", "Ingreso", "Ahorro"]
   const tipo = tiposValidos.includes(body?.tipo) ? body.tipo : "Gasto"
@@ -53,8 +66,6 @@ export async function PATCH(
   if (parsed.monto === null) {
     return NextResponse.json({ error: "No se pudo detectar el monto en el texto." }, { status: 400 })
   }
-
-  await ensureSchema()
 
   const result = await db.execute({
     sql: "UPDATE gastos SET raw = ?, descripcion = ?, categoria = ?, monto = ?, tipo = ? WHERE id = ? AND user_id = ?",

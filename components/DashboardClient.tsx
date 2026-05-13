@@ -6,6 +6,8 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
   LineChart, Line,
 } from "recharts"
+import { motion } from "framer-motion"
+import { useSession } from "next-auth/react"
 
 type Gasto = {
   id: string
@@ -54,6 +56,15 @@ const bancoColor = (banco: string) =>
 const BANCOS = ["BROU", "ITAÚ", "Santander", "Scotiabank", "OCA", "Otro"]
 const TIPOS  = ["Caja de Ahorro", "Cuenta Corriente", "Caja de Ahorro Joven", "Depósito"]
 const EMPTY_FORM = { banco: "BROU", tipo: "Caja de Ahorro", moneda: "UY", saldo_inicial: "", nombre: "" }
+
+const BANK_ACCENTS: Record<string, string> = {
+  BROU:       "#3b82f6",
+  ITAU:       "#f97316",
+  ITAÚ:       "#f97316",
+  Santander:  "#ef4444",
+  Scotiabank: "#ef4444",
+  OCA:        "#8b5cf6",
+}
 
 // ── Health score ring ───────────────────────────────────────────────────────
 function ScoreRing({ score }: { score: number }) {
@@ -105,6 +116,9 @@ export function DashboardClient() {
   const [cuentaError, setCuentaError] = useState<string | null>(null)
 
   const [markingTransfer, setMarkingTransfer] = useState<string | null>(null)
+
+  const { data: session } = useSession()
+  const userName = session?.user?.name?.split(" ")[0] ?? "Lucas"
 
   useEffect(() => { fetchAll() }, [])
 
@@ -394,23 +408,132 @@ export function DashboardClient() {
     [gastos]
   )
 
+  const totalUY = useMemo(
+    () => cuentas.filter(c => c.moneda === "UY").reduce((s, c) => s + c.saldo_actual, 0),
+    [cuentas]
+  )
+  const totalUSD = useMemo(
+    () => cuentas.filter(c => c.moneda === "USD").reduce((s, c) => s + c.saldo_actual, 0),
+    [cuentas]
+  )
+  const greeting = useMemo(() => {
+    const h = new Date().getHours()
+    return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"
+  }, [])
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
 
-      {/* Header + month nav */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Principal</h2>
-          <p className="mt-0.5 text-sm text-gray-500 capitalize">{monthLabel}</p>
+      {/* ── HERO ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="mac-card overflow-hidden"
+      >
+        <div className="p-6 lg:p-8">
+          <div className="flex items-start justify-between mb-5">
+            <div className="min-w-0 flex-1">
+              <p className="mb-1.5 text-sm text-slate-500 dark:text-slate-400">{greeting}, {userName}</p>
+              <div className="flex flex-wrap items-baseline gap-3">
+                {loading ? (
+                  <div className="skeleton h-12 w-52" />
+                ) : (
+                  <span className="text-5xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white">
+                    ${fmtDec(totalUY)}
+                  </span>
+                )}
+                {!loading && insights.length > 0 && (
+                  <span className={`rounded-full px-2.5 py-1 text-sm font-medium ${
+                    insights[0].positive
+                      ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400"
+                      : "bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-400"
+                  }`}>
+                    {insights[0].value}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-sm text-slate-400 dark:text-slate-500">
+                Balance pesos · <span className="capitalize">{monthLabel}</span>
+                {totalUSD !== 0 && (
+                  <span className="ml-2 text-slate-300 dark:text-slate-600">
+                    · U$S {fmtDec(Math.abs(totalUSD))} USD
+                  </span>
+                )}
+              </p>
+            </div>
+            {!loading && health && (
+              <div className="ml-6 hidden shrink-0 flex-col items-center gap-0.5 sm:flex">
+                <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{health.score}</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500">/100</p>
+                <p className="mt-0.5 text-[10px] font-semibold" style={{
+                  color: health.score >= 80 ? "#22c55e" : health.score >= 65 ? "#4a7d5a" : health.score >= 45 ? "#d4a843" : "#ef4444"
+                }}>Salud</p>
+              </div>
+            )}
+          </div>
+
+          {!loading && (stats.ingresos > 0 || stats.gastos > 0) && (
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                <div>
+                  <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ingresos</p>
+                  <p className="tabular-nums text-sm font-semibold text-emerald-700 dark:text-emerald-300">${fmt(stats.ingresos)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-3 py-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <div>
+                  <p className="text-[10px] font-medium text-red-600 dark:text-red-400">Gastos</p>
+                  <p className="tabular-nums text-sm font-semibold text-red-700 dark:text-red-300">${fmt(stats.gastos)}</p>
+                </div>
+              </div>
+              {stats.ahorros > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-blue-100 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/40 px-3 py-2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <div>
+                    <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400">Ahorros</p>
+                    <p className="tabular-nums text-sm font-semibold text-blue-700 dark:text-blue-300">${fmt(stats.ahorros)}</p>
+                  </div>
+                </div>
+              )}
+              {stats.ingresos > 0 && (
+                <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+                  stats.balance >= 0
+                    ? "border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50"
+                    : "border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40"
+                }`}>
+                  <div>
+                    <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Cashflow</p>
+                    <p className={`tabular-nums text-sm font-semibold ${
+                      stats.balance >= 0
+                        ? "text-slate-700 dark:text-slate-300"
+                        : "text-red-700 dark:text-red-400"
+                    }`}>
+                      {stats.balance >= 0 ? "+" : ""}{fmt(stats.balance)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+      </motion.div>
+
+      {/* Month nav */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 capitalize">
+          {monthLabel}
+        </h3>
         <div className="flex items-center gap-1">
-          <button onClick={() => setMonthOffset(o => o - 1)} className="rounded-lg p-2 hover:bg-white border border-transparent hover:border-black/[0.06] text-gray-400 transition-all">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+          <button onClick={() => setMonthOffset(o => o - 1)} className="rounded-lg p-2 text-slate-400 dark:text-slate-500 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <button onClick={() => setMonthOffset(0)} className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 hover:bg-white border border-transparent hover:border-black/[0.06] transition-all">Hoy</button>
-          <button onClick={() => setMonthOffset(o => o + 1)} className="rounded-lg p-2 hover:bg-white border border-transparent hover:border-black/[0.06] text-gray-400 transition-all">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <button onClick={() => setMonthOffset(0)} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">Hoy</button>
+          <button onClick={() => setMonthOffset(o => o + 1)} className="rounded-lg p-2 text-slate-400 dark:text-slate-500 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
       </div>
@@ -418,34 +541,66 @@ export function DashboardClient() {
       {/* ── Mis Cuentas ── */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Mis Cuentas</h3>
-          <button onClick={openAdd} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-white border border-transparent hover:border-black/[0.08] transition-all">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Agregar producto
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Cuentas</h3>
+          <button onClick={openAdd} className="flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 transition-all hover:border-slate-200 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-800">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Agregar
           </button>
         </div>
         {loading ? (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[1,2,3,4].map(i => <div key={i} className="skeleton h-24"/>)}</div>
-        ) : (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-28" />)}
+          </div>
+        ) : (
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}
+            className="grid grid-cols-2 gap-3 lg:grid-cols-4"
+          >
             {cuentas.map(c => {
-              const col = bancoColor(c.banco)
+              const accentColor = BANK_ACCENTS[c.banco] ?? "#64748b"
               const isNeg = c.saldo_actual < 0
               return (
-                <button key={c.id} onClick={() => openEdit(c)}
-                  className={`text-left rounded-2xl border p-4 transition-all hover:shadow-sm hover:scale-[1.01] ${col.bg} ${col.border}`}>
-                  <div className="flex items-start justify-between">
-                    <span className={`text-xs font-bold uppercase tracking-wider ${col.label}`}>{c.banco}</span>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-300 mt-0.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <motion.button
+                  key={c.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 10 },
+                    show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+                  }}
+                  whileHover={{ scale: 1.02, transition: { duration: 0.15 } }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => openEdit(c)}
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-left shadow-sm transition-shadow duration-200 hover:shadow-md"
+                >
+                  <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: accentColor }} />
+
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full" style={{ background: accentColor }} />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        {c.banco}
+                      </span>
+                    </div>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      className="text-slate-300 dark:text-slate-600 opacity-0 transition-opacity group-hover:opacity-100">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">{c.tipo} · {c.moneda === "USD" ? "USD" : "$"}</p>
-                  <p className={`mt-2 text-xl font-bold tabular-nums ${isNeg ? "text-red-600" : "text-gray-900"}`}>
-                    {c.moneda === "USD" ? "U$S " : "$"}{fmtDec(Math.abs(c.saldo_actual))}
+
+                  <p className={`text-xl font-bold tabular-nums tracking-tight leading-none ${
+                    isNeg ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-white"
+                  }`}>
+                    {c.moneda === "USD" ? "U$S" : "$"}{fmtDec(Math.abs(c.saldo_actual))}
                   </p>
-                </button>
+                  <p className="mt-1.5 truncate text-xs text-slate-400 dark:text-slate-500">
+                    {c.tipo === "Caja de Ahorro" ? "CA" : c.tipo} · {c.moneda === "USD" ? "Dólares" : "Pesos"}
+                  </p>
+                </motion.button>
               )
             })}
-          </div>
+          </motion.div>
         )}
       </div>
 

@@ -1,17 +1,11 @@
 import type { Metadata } from "next"
-import { Playfair_Display, DM_Sans } from "next/font/google"
+import { Inter } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/Providers"
 
-const playfair = Playfair_Display({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-})
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-inter",
   display: "swap",
 })
 
@@ -19,7 +13,6 @@ export const metadata: Metadata = {
   title: "Finanzas Personal",
   description: "Tu gestor financiero inteligente",
   manifest: "/manifest.json",
-  themeColor: "#141311",
   appleWebApp: {
     capable: true,
     title: "Finanzas",
@@ -34,8 +27,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${playfair.variable} ${dmSans.variable} light`}>
-      <body className="font-body bg-[#f5f5f7] text-[#1d1d1f] antialiased">
+    <html lang="es" className={inter.variable} suppressHydrationWarning>
+      <head>
+        {/* Anti-FOUC: aplica tema antes del primer render */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');document.documentElement.classList.add(t)}catch(e){}})()`,
+          }}
+        />
+      </head>
+      <body className="font-sans bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

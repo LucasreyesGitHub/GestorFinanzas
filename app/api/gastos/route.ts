@@ -81,11 +81,14 @@ export async function POST(request: Request) {
     const parsed = parseGasto(raw)
     if (parsed.monto === null) return NextResponse.json({ error: "No se pudo detectar el monto en el texto." }, { status: 400 })
 
+    // Use parser-detected currency if client didn't specify one
+    const resolvedMoneda = (typeof body?.moneda === "string" && body.moneda.trim()) ? body.moneda.trim() : parsed.moneda
+
     await db.execute({
       sql: "INSERT INTO gastos (id, user_id, raw, descripcion, categoria, subcategoria, monto, tipo, moneda, created_at, cuenta_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      args: [id, userId, raw, parsed.descripcion, parsed.categoria, subcategoria, parsed.monto, tipo, moneda, created_at, cuenta_id],
+      args: [id, userId, raw, parsed.descripcion, parsed.categoria, subcategoria, parsed.monto, tipo, resolvedMoneda, created_at, cuenta_id],
     })
-    return NextResponse.json({ id, raw, descripcion: parsed.descripcion, categoria: parsed.categoria, subcategoria, monto: parsed.monto, tipo, moneda, created_at, cuenta_id })
+    return NextResponse.json({ id, raw, descripcion: parsed.descripcion, categoria: parsed.categoria, subcategoria, monto: parsed.monto, tipo, moneda: resolvedMoneda, created_at, cuenta_id })
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })
   }

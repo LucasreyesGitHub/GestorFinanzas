@@ -132,10 +132,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userInitial = (session?.user?.name ?? userName)[0].toUpperCase()
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-[#f5f6f8] dark:bg-[#0c0e18]">
 
       {/* ── Sidebar desktop ── */}
-      <aside className="fixed left-0 top-0 hidden h-screen w-64 flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 lg:flex z-40">
+      <aside className="fixed left-0 top-0 hidden h-screen w-60 flex-col border-r border-black/[0.06] dark:border-white/[0.05] bg-white dark:bg-[#0d0f1a] lg:flex z-40">
 
         {/* Logo + toggle */}
         <div className="flex items-center justify-between px-5 py-5">
@@ -152,7 +152,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Separator */}
-        <div className="mx-5 h-px bg-slate-100 dark:bg-slate-800" />
+        <div className="mx-5 h-px bg-black/[0.05] dark:bg-white/[0.04]" />
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
@@ -162,22 +162,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
+                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
                   active
-                    ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-slate-900/[0.06] dark:bg-white/[0.06] text-slate-900 dark:text-white"
+                    : "text-slate-500 dark:text-[#8892a4] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 <span className={`shrink-0 transition-colors ${
                   active
-                    ? "text-slate-700 dark:text-slate-200"
-                    : "text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                    ? "text-amber-500 dark:text-amber-400"
+                    : "text-slate-400 dark:text-[#4f5769] group-hover:text-slate-600 dark:group-hover:text-[#8892a4]"
                 }`}>
                   {item.icon}
                 </span>
                 <span className="flex-1">{item.label}</span>
                 {active && (
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-900 dark:bg-white" />
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-amber-400 dark:bg-amber-400" />
                 )}
               </Link>
             )
@@ -185,7 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Separator */}
-        <div className="mx-5 h-px bg-slate-100 dark:bg-slate-800" />
+        <div className="mx-5 h-px bg-black/[0.05] dark:bg-white/[0.04]" />
 
         {/* User section */}
         <div className="px-3 py-4">
@@ -208,7 +208,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── Main content ── */}
-      <div className="lg:pl-64">
+      <div className="lg:pl-60">
         <main className="min-h-screen px-4 pb-24 pt-5 sm:px-6 lg:pb-10 lg:pt-8">
           <div className="mx-auto max-w-5xl">
 
@@ -230,27 +230,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Bottom nav mobile ── */}
       <nav className="fixed inset-x-0 bottom-0 z-30 lg:hidden">
-        <div className="border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl">
-          <div className="flex items-center justify-around px-2 py-1.5">
+        <div className="border-t border-black/[0.06] dark:border-white/[0.05] bg-white/90 dark:bg-[#0d0f1a]/95 backdrop-blur-xl">
+          <div className="flex items-center justify-around px-2 py-2">
             {navItems.map(item => {
               const active = pathname === item.href
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex flex-col items-center gap-1 rounded-xl px-3 py-2 transition-all ${
+                  className={`flex flex-col items-center gap-1 rounded-xl px-3 py-1.5 transition-all ${
                     active
                       ? "text-slate-900 dark:text-white"
-                      : "text-slate-400 dark:text-slate-500"
+                      : "text-slate-400 dark:text-[#4f5769]"
                   }`}
                 >
-                  <span className={active ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500"}>
+                  <span className={active ? "text-amber-500 dark:text-amber-400" : "text-slate-400 dark:text-[#4f5769]"}>
                     {item.icon}
                   </span>
-                  <span className="text-[10px] font-medium">{item.label}</span>
-                  {active && (
-                    <span className="h-1 w-1 rounded-full bg-slate-900 dark:bg-white" />
-                  )}
+                  <span className={`text-[10px] font-medium ${active ? "text-slate-900 dark:text-white" : ""}`}>{item.label}</span>
                 </Link>
               )
             })}

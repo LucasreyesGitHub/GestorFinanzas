@@ -29,6 +29,7 @@ export async function ensureSchema() {
     "ALTER TABLE gastos ADD COLUMN moneda TEXT NOT NULL DEFAULT 'UY'",
     "ALTER TABLE gastos ADD COLUMN cuenta_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE gastos ADD COLUMN es_transferencia INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE gastos ADD COLUMN external_id TEXT",
     `CREATE TABLE IF NOT EXISTS cuentas (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

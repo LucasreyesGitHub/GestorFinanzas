@@ -1,8 +1,10 @@
 export interface GastoParsed {
-  monto: number | null
-  categoria: string
+  monto:       number | null
+  moneda:      "UY" | "USD"
+  categoria:   string
+  subcategoria: string
   descripcion: string
-  raw: string
+  raw:         string
 }
 
 export const CATEGORIAS_AHORRO = [
@@ -14,30 +16,45 @@ export const CATEGORIAS_AHORRO = [
   "Otro Ahorro",
 ]
 
-// ── Categorías con palabras clave ──────────────────────────────────────────
+// ── Keyword → category map ─────────────────────────────────────────────────
 const CATEGORIAS: Record<string, string[]> = {
-  Supermercado: ["super", "supermercado", "almacén", "almacen", "verdulería", "verduleria", "carnicería", "carniceria", "fiambrería", "feria"],
-  Transporte:   ["taxi", "uber", "cabify", "nafta", "combustible", "colectivo", "bus", "tren", "subte", "estacionamiento", "peaje", "remis"],
-  Servicios:    ["luz", "agua", "gas", "internet", "teléfono", "telefono", "celular", "electricidad", "factura", "servicio"],
-  Salud:        ["farmacia", "médico", "medico", "doctor", "clínica", "clinica", "hospital", "medicamento", "consulta"],
-  Restaurante:  ["restaurante", "restaurant", "comida", "almuerzo", "cena", "desayuno", "cafetería", "cafeteria", "café", "cafe", "pizza", "sushi", "delivery"],
-  Entretenimiento: ["cine", "teatro", "concierto", "recital", "streaming", "netflix", "spotify", "juego", "deporte", "gym", "gimnasio"],
-  Ropa:         ["ropa", "zapatillas", "zapatos", "remera", "pantalón", "pantalon", "camisa", "indumentaria"],
-  Educación:    ["libro", "curso", "clase", "escuela", "universidad", "cuota", "educación", "educacion"],
-  Hogar:        ["mueble", "electrodoméstico", "electrodomestico", "limpieza", "ferretería", "ferreteria", "decoración", "decoracion"],
-  "Plazo Fijo": ["plazo fijo"],
+  Supermercado:    ["super", "supermercado", "almacén", "almacen", "verdulería", "verduleria", "carnicería", "carniceria", "fiambrería", "feria"],
+  Transporte:      ["taxi", "uber", "cabify", "nafta", "combustible", "colectivo", "bus", "tren", "subte", "estacionamiento", "peaje", "remis", "bicicleta", "moto"],
+  Servicios:       ["luz", "agua", "gas", "internet", "teléfono", "telefono", "celular", "electricidad", "factura", "servicio", "antel", "ute", "ose"],
+  Salud:           ["farmacia", "médico", "medico", "doctor", "clínica", "clinica", "hospital", "medicamento", "consulta", "odontólogo", "odontologo", "dentista"],
+  Restaurante:     ["restaurante", "restaurant", "comida", "almuerzo", "cena", "desayuno", "cafetería", "cafeteria", "café", "cafe", "pizza", "sushi", "delivery", "pedidosya", "rappi"],
+  Entretenimiento: ["cine", "teatro", "concierto", "recital", "streaming", "netflix", "spotify", "disney", "hbo", "juego", "deporte", "gym", "gimnasio", "videojuego"],
+  Ropa:            ["ropa", "zapatillas", "zapatos", "remera", "pantalón", "pantalon", "camisa", "indumentaria", "calzado"],
+  Educación:       ["libro", "curso", "clase", "escuela", "universidad", "cuota", "educación", "educacion", "taller", "seminario"],
+  Hogar:           ["mueble", "electrodoméstico", "electrodomestico", "limpieza", "ferretería", "ferreteria", "decoración", "decoracion", "herramienta"],
+  "Plazo Fijo":          ["plazo fijo"],
   "Caja de Ahorro BROU": ["brou"],
   "Caja de Ahorro Itaú": ["itau", "itaú"],
-  Efectivo:     ["efectivo", "billetera física", "billetera fisica"],
-  Criptomonedas: ["crypto", "bitcoin", "btc", "eth", "ethereum", "cripto", "criptomoneda"],
-  "Otro Ahorro": ["alcancía", "alcancia", "chanchito"],
+  Efectivo:              ["efectivo", "billetera física", "billetera fisica"],
+  Criptomonedas:         ["crypto", "bitcoin", "btc", "eth", "ethereum", "cripto", "criptomoneda"],
+  "Otro Ahorro":         ["alcancía", "alcancia", "chanchito"],
 }
 
-// ── Extraer monto ──────────────────────────────────────────────────────────
+// ── Currency detection ────────────────────────────────────────────────────
+function detectarMoneda(texto: string): "UY" | "USD" {
+  const lower = texto.toLowerCase()
+  if (
+    /u\$s/i.test(texto) ||
+    /usd/i.test(texto) ||
+    /dólares?/i.test(texto) ||
+    /dolares?/i.test(texto) ||
+    /\bu\s*\$/.test(texto)
+  ) return "USD"
+  return "UY"
+}
+
+// ── Amount extraction ─────────────────────────────────────────────────────
 function extraerMonto(texto: string): number | null {
   const patrones = [
+    /u\$s\s*([\d.,]+)/i,
+    /usd\s*([\d.,]+)/i,
     /\$\s*([\d.,]+)/,
-    /([\d.,]+)\s*pesos?/i,
+    /([\d.,]+)\s*(?:dólares?|dolares?|pesos?|usd)/i,
     /\b([\d.,]+)\b/,
   ]
   for (const patron of patrones) {
@@ -51,22 +68,24 @@ function extraerMonto(texto: string): number | null {
   return null
 }
 
-// ── Detectar categoría ─────────────────────────────────────────────────────
+// ── Category detection ────────────────────────────────────────────────────
 function detectarCategoria(texto: string): string {
   const lower = texto.toLowerCase()
   for (const [categoria, keywords] of Object.entries(CATEGORIAS)) {
-    if (keywords.some((kw) => lower.includes(kw))) return categoria
+    if (keywords.some(kw => lower.includes(kw))) return categoria
   }
   return "Otro"
 }
 
-// ── Función principal ──────────────────────────────────────────────────────
+// ── Main parser ───────────────────────────────────────────────────────────
 export function parseGasto(input: string): GastoParsed {
   const texto = input.trim()
   return {
-    monto:       extraerMonto(texto),
-    categoria:   detectarCategoria(texto),
-    descripcion: texto,
-    raw:         input,
+    monto:        extraerMonto(texto),
+    moneda:       detectarMoneda(texto),
+    categoria:    detectarCategoria(texto),
+    subcategoria: "",
+    descripcion:  texto,
+    raw:          input,
   }
 }

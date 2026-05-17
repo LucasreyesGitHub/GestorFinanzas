@@ -6,8 +6,11 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
   LineChart, Line,
 } from "recharts"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { useSession } from "next-auth/react"
+import { parseGasto } from "@/lib/parseGasto"
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type Gasto = {
   id: string
@@ -34,53 +37,117 @@ type Cuenta = {
   orden: number
 }
 
-// ── Formatters ──────────────────────────────────────────────────────────────
+// ── Formatters ───────────────────────────────────────────────────────────────
+
 const fmt = (n: number) =>
   new Intl.NumberFormat("es-UY", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
 
 const fmtDec = (n: number) =>
   new Intl.NumberFormat("es-UY", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const CAT_COLORS = ["#4a7d5a", "#6f9971", "#8faf97", "#d4a843", "#e8c97a", "#60a5fa", "#f87171"]
 
 const BANCO_COLORS: Record<string, { bg: string; border: string; label: string }> = {
-  BROU:      { bg: "bg-blue-50",   border: "border-blue-200",   label: "text-blue-700" },
-  ITAU:      { bg: "bg-orange-50", border: "border-orange-200", label: "text-orange-700" },
-  ITAÚ:      { bg: "bg-orange-50", border: "border-orange-200", label: "text-orange-700" },
-  Santander: { bg: "bg-red-50",    border: "border-red-200",    label: "text-red-700" },
-  Scotiabank:{ bg: "bg-red-50",    border: "border-red-200",    label: "text-red-700" },
+  BROU:       { bg: "bg-blue-50",   border: "border-blue-200",   label: "text-blue-700" },
+  ITAU:       { bg: "bg-orange-50", border: "border-orange-200", label: "text-orange-700" },
+  ITAÚ:       { bg: "bg-orange-50", border: "border-orange-200", label: "text-orange-700" },
+  Santander:  { bg: "bg-red-50",    border: "border-red-200",    label: "text-red-700" },
+  Scotiabank: { bg: "bg-red-50",    border: "border-red-200",    label: "text-red-700" },
 }
 const bancoColor = (banco: string) =>
   BANCO_COLORS[banco] ?? { bg: "bg-gray-50", border: "border-gray-200", label: "text-gray-700" }
 
-const BANCOS = ["BROU", "ITAÚ", "Santander", "Scotiabank", "OCA", "Otro"]
-const TIPOS  = ["Caja de Ahorro", "Cuenta Corriente", "Caja de Ahorro Joven", "Depósito"]
+const BANCOS    = ["BROU", "ITAÚ", "Santander", "Scotiabank", "OCA", "Otro"]
+const TIPOS_CA  = ["Caja de Ahorro", "Cuenta Corriente", "Caja de Ahorro Joven", "Depósito"]
 const EMPTY_FORM = { banco: "BROU", tipo: "Caja de Ahorro", moneda: "UY", saldo_inicial: "", nombre: "" }
 
 const BANK_ACCENTS: Record<string, string> = {
-  BROU:       "#3b82f6",
-  ITAU:       "#f97316",
-  ITAÚ:       "#f97316",
-  Santander:  "#ef4444",
-  Scotiabank: "#ef4444",
-  OCA:        "#8b5cf6",
+  BROU: "#3b82f6", ITAU: "#f97316", ITAÚ: "#f97316",
+  Santander: "#ef4444", Scotiabank: "#ef4444", OCA: "#8b5cf6",
 }
 
-// ── Health score ring ───────────────────────────────────────────────────────
+const BANK_GRADIENTS: Record<string, [string, string]> = {
+  BROU:       ["#1e3a8a", "#2563eb"],
+  ITAU:       ["#7c2d12", "#ea580c"],
+  ITAÚ:       ["#7c2d12", "#ea580c"],
+  Santander:  ["#7f1d1d", "#dc2626"],
+  Scotiabank: ["#7f1d1d", "#b91c1c"],
+  OCA:        ["#3b0764", "#7c3aed"],
+}
+const bankGradient = (banco: string): [string, string] =>
+  BANK_GRADIENTS[banco] ?? ["#1e293b", "#334155"]
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function norm(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+}
+
+function BankMark({ banco }: { banco: string }) {
+  return (
+    <div
+      className="flex h-7 w-7 items-center justify-center rounded-lg"
+      style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)" }}
+    >
+      <span className="text-xs font-black text-white/80 leading-none select-none">
+        {banco.charAt(0)}
+      </span>
+    </div>
+  )
+}
+
+function catEmoji(name: string): string {
+  const n = name.toLowerCase()
+  if (n.includes("super") || n.includes("almac") || n.includes("verdule") || n.includes("carnicer")) return "🛒"
+  if (n.includes("transport") || n.includes("taxi") || n.includes("uber") || n.includes("nafta") || n.includes("colectivo")) return "🚗"
+  if (n.includes("servicio") || n.includes("luz") || n.includes("agua") || n.includes("gas") || n.includes("internet")) return "⚡"
+  if (n.includes("salud") || n.includes("médico") || n.includes("medico") || n.includes("farmacia")) return "💊"
+  if (n.includes("restaurante") || n.includes("comida") || n.includes("caf") || n.includes("almuerzo") || n.includes("delivery")) return "🍽"
+  if (n.includes("netflix") || n.includes("spotify") || n.includes("streaming") || n.includes("cine") || n.includes("entretenimiento")) return "🎬"
+  if (n.includes("gym") || n.includes("gimnasio") || n.includes("deporte")) return "💪"
+  if (n.includes("ropa") || n.includes("indumentaria")) return "👕"
+  if (n.includes("educac") || n.includes("libro") || n.includes("curso")) return "📚"
+  if (n.includes("ahorro") || n.includes("plazo") || n.includes("invers")) return "💰"
+  return "📋"
+}
+
+// ── Dark mode hook ────────────────────────────────────────────────────────────
+
+function useDarkMode() {
+  const [dark, setDark] = useState(false)
+  useEffect(() => {
+    const update = () => setDark(document.documentElement.classList.contains("dark"))
+    update()
+    const obs = new MutationObserver(update)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => obs.disconnect()
+  }, [])
+  return dark
+}
+
+// ── ScoreRing — dark mode aware ───────────────────────────────────────────────
+
 function ScoreRing({ score }: { score: number }) {
   const r = 36, c = 2 * Math.PI * r
-  const color = score >= 80 ? "#22c55e" : score >= 65 ? "#4a7d5a" : score >= 45 ? "#d4a843" : "#ef4444"
-  const label = score >= 80 ? "Excelente" : score >= 65 ? "Bueno" : score >= 45 ? "Regular" : score >= 25 ? "A mejorar" : "Crítico"
+  const color =
+    score >= 80 ? "#22c55e" : score >= 65 ? "#4a7d5a" : score >= 45 ? "#d4a843" : "#ef4444"
+  const label =
+    score >= 80 ? "Excelente" : score >= 65 ? "Bueno" : score >= 45 ? "Regular" :
+    score >= 25 ? "A mejorar" : "Crítico"
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <svg width="88" height="88" viewBox="0 0 88 88">
-        <circle cx="44" cy="44" r={r} fill="none" stroke="#f3f4f6" strokeWidth="7" />
+      <svg width="88" height="88" viewBox="0 0 88 88" className="text-slate-900 dark:text-white">
+        <circle cx="44" cy="44" r={r} fill="none"
+          className="stroke-black/[0.06] dark:stroke-white/[0.07]" strokeWidth="7" />
         <circle cx="44" cy="44" r={r} fill="none" stroke={color} strokeWidth="7"
           strokeDasharray={c} strokeDashoffset={c - (score / 100) * c}
           strokeLinecap="round" transform="rotate(-90 44 44)"
-          style={{ transition: "stroke-dashoffset 0.8s ease" }}
-        />
-        <text x="44" y="50" textAnchor="middle" fill="#111827" fontSize="22" fontWeight="700">{score}</text>
+          style={{ transition: "stroke-dashoffset 0.8s ease" }} />
+        <text x="44" y="50" textAnchor="middle" fill="currentColor" fontSize="22" fontWeight="700">
+          {score}
+        </text>
       </svg>
       <span className="text-xs font-semibold" style={{ color }}>{label}</span>
     </div>
@@ -90,32 +157,324 @@ function ScoreRing({ score }: { score: number }) {
 function MiniBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = Math.min(100, (value / max) * 100)
   return (
-    <div className="h-1.5 w-full rounded-full bg-gray-100">
-      <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
+    <div className="h-1.5 w-full rounded-full bg-black/[0.05] dark:bg-white/[0.05]">
+      <div className="h-full rounded-full transition-all duration-700"
+        style={{ width: `${pct}%`, background: color }} />
     </div>
   )
 }
 
-// ── Component ───────────────────────────────────────────────────────────────
+// ── Custom recharts tooltip ───────────────────────────────────────────────────
+
+function ChartTooltip({
+  active, payload, label,
+}: {
+  active?: boolean
+  payload?: Array<{ name: string; value: number; color: string }>
+  label?: string
+}) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl border border-black/[0.07] dark:border-white/[0.07] bg-white dark:bg-[#16192a] px-3 py-2.5 shadow-lg text-xs space-y-0.5">
+      {label && (
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-[#4f5769]">
+          {label}
+        </p>
+      )}
+      {payload.map((p, i) => (
+        <p key={i} className="tabular-nums font-semibold" style={{ color: p.color }}>
+          {p.name === "gastos" ? "Gastos" : p.name === "ingresos" ? "Ingresos" : p.name}
+          {" — "}${fmt(p.value)}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// ── SmartInput ────────────────────────────────────────────────────────────────
+
+interface SmartInputProps {
+  cuentas: Cuenta[]
+  selectedCuenta: string
+  setSelectedCuenta: (id: string) => void
+  onSubmit: (text: string, tipo: string, cuentaId: string, date?: string) => Promise<void>
+}
+
+function SmartInput({ cuentas, selectedCuenta, setSelectedCuenta, onSubmit }: SmartInputProps) {
+  const [text, setText]         = useState("")
+  const [manualTipo, setManualTipo] = useState("Gasto")
+  const [date, setDate]         = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+
+  const parsed = useMemo(() => parseGasto(text), [text])
+
+  // Infer tipo from natural language
+  const inferredTipo = useMemo(() => {
+    if (!text.trim()) return null
+    if (/(cobr[eéí]|recibi|recib[íi]|sueldo|salario|ingres[oó]|me\s+pag[ao])/i.test(text)) return "Ingreso"
+    if (/(ahorr[eéo]|invert[íi]|plazo\s*fijo)/i.test(text)) return "Ahorro"
+    return null
+  }, [text])
+
+  const effectiveTipo = inferredTipo ?? manualTipo
+
+  // Infer cuenta from bank name in text
+  const inferredCuenta = useMemo(() => {
+    if (!text.trim()) return null
+    const n = norm(text)
+    return cuentas.find(c => n.includes(norm(c.banco))) ?? null
+  }, [text, cuentas])
+
+  const effectiveCuentaId = inferredCuenta?.id ?? selectedCuenta
+
+  // Build NLP preview chips
+  type Chip = { key: string; label: string; bg: string; fg: string; auto: boolean }
+  const chips = useMemo((): Chip[] => {
+    if (!text.trim()) return []
+    const result: Chip[] = []
+
+    const tipoStyles: Record<string, [string, string]> = {
+      Gasto:   ["bg-red-50 dark:bg-red-950/40",        "text-red-600 dark:text-red-400"],
+      Ingreso: ["bg-emerald-50 dark:bg-emerald-950/40", "text-emerald-700 dark:text-emerald-400"],
+      Ahorro:  ["bg-blue-50 dark:bg-blue-950/40",       "text-blue-600 dark:text-blue-400"],
+    }
+    const [tipoBg, tipoFg] = tipoStyles[effectiveTipo] ?? tipoStyles.Gasto
+    result.push({ key: "tipo", label: effectiveTipo, bg: tipoBg, fg: tipoFg, auto: !!inferredTipo })
+
+    if (parsed.monto !== null) {
+      result.push({
+        key: "monto",
+        label: `${parsed.moneda === "USD" ? "U$S " : "$"}${fmt(parsed.monto)}`,
+        bg: "bg-slate-100 dark:bg-[#1a1d2e]",
+        fg: "text-slate-700 dark:text-slate-300",
+        auto: true,
+      })
+    }
+
+    const cuenta = cuentas.find(c => c.id === effectiveCuentaId)
+    if (cuenta) {
+      result.push({
+        key: "cuenta",
+        label: `${cuenta.banco} ${cuenta.moneda === "USD" ? "USD" : "$"}`,
+        bg: "bg-slate-100 dark:bg-[#1a1d2e]",
+        fg: "text-slate-600 dark:text-slate-400",
+        auto: !!inferredCuenta,
+      })
+    }
+
+    if (parsed.categoria !== "Otro") {
+      result.push({
+        key: "cat",
+        label: `${catEmoji(parsed.categoria)} ${parsed.categoria}`,
+        bg: "bg-slate-100 dark:bg-[#1a1d2e]",
+        fg: "text-slate-500 dark:text-slate-500",
+        auto: true,
+      })
+    }
+
+    return result
+  }, [text, effectiveTipo, inferredTipo, parsed, effectiveCuentaId, inferredCuenta, cuentas])
+
+  const canSubmit = text.trim().length > 0 && !!effectiveCuentaId && !submitting
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!canSubmit) return
+    setSubmitting(true); setError(null)
+    try {
+      await onSubmit(text, effectiveTipo, effectiveCuentaId, date || undefined)
+      setText(""); setDate("")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="mac-card overflow-hidden"
+    >
+      <form onSubmit={handleSubmit}>
+        {/* ── Header bar ── */}
+        <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] px-5 py-3">
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-[#4f5769]">
+              Registrar movimiento
+            </p>
+          </div>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="rounded-lg border border-black/[0.07] dark:border-white/[0.06] bg-transparent px-2.5 py-1 text-[11px] text-slate-400 dark:text-slate-500 focus:outline-none focus:border-amber-400/60 transition-colors"
+          />
+        </div>
+
+        {/* ── Text input ── */}
+        <div className="px-5 py-4">
+          <textarea
+            value={text}
+            onChange={e => {
+              setText(e.target.value)
+              e.target.style.height = "auto"
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"
+            }}
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                handleSubmit(e as unknown as React.FormEvent)
+              }
+            }}
+            placeholder="Ej: gasté $500 del BROU en taxi · cobré sueldo $22813 en ITAÚ…"
+            className="w-full resize-none overflow-hidden bg-transparent text-base leading-relaxed text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-[#2a2f48] focus:outline-none"
+            style={{ minHeight: "44px" }}
+            disabled={submitting}
+            rows={1}
+          />
+
+          {/* NLP preview chips */}
+          <AnimatePresence>
+            {chips.length > 0 && (
+              <motion.div
+                key="chips"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18 }}
+                className="mt-3 flex flex-wrap gap-1.5"
+              >
+                {chips.map((chip, i) => (
+                  <motion.span
+                    key={chip.key}
+                    initial={{ opacity: 0, scale: 0.8, x: -6 }}
+                    animate={{ opacity: 1, scale: 1, x: 0 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ delay: i * 0.05, duration: 0.18, ease: "easeOut" }}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${chip.bg} ${chip.fg}`}
+                  >
+                    {chip.auto && (
+                      <span className="opacity-40">
+                        <svg width="5" height="5" viewBox="0 0 8 8">
+                          <circle cx="4" cy="4" r="4" fill="currentColor" />
+                        </svg>
+                      </span>
+                    )}
+                    {chip.label}
+                  </motion.span>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* ── Footer: accounts + tipo + submit ── */}
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-black/[0.04] dark:border-white/[0.04] px-5 py-3">
+          {/* Account selector */}
+          {cuentas.map(c => {
+            const accent  = BANK_ACCENTS[c.banco] ?? "#64748b"
+            const isActive = c.id === effectiveCuentaId
+            const isAuto   = isActive && !!inferredCuenta && !!text.trim()
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCuenta(c.id)}
+                className="rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all border"
+                style={isActive
+                  ? { background: `${accent}18`, borderColor: `${accent}45`, color: accent }
+                  : { background: "transparent", borderColor: "rgba(0,0,0,0.07)", color: "#9ca3af" }
+                }
+              >
+                {isAuto && <span className="mr-1 opacity-50 text-[8px]">●</span>}
+                {c.banco}·{c.moneda === "USD" ? "USD" : "$"}
+              </button>
+            )
+          })}
+
+          <div className="flex-1 min-w-0" />
+
+          {/* Tipo toggle */}
+          {[
+            { t: "Gasto",   dot: "bg-red-500" },
+            { t: "Ingreso", dot: "bg-emerald-500" },
+            { t: "Ahorro",  dot: "bg-blue-500" },
+          ].map(({ t, dot }) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setManualTipo(t)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all border ${
+                effectiveTipo === t
+                  ? "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.03] dark:bg-white/[0.04] text-slate-800 dark:text-slate-200"
+                  : "border-transparent text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400"
+              } ${inferredTipo ? "opacity-50 cursor-default" : ""}`}
+              title={inferredTipo ? "Tipo detectado automáticamente del texto" : undefined}
+            >
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+              {t}
+            </button>
+          ))}
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="btn-primary py-2 px-4 text-xs"
+          >
+            {submitting ? (
+              <span className="flex items-center gap-1.5">
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                  className="inline-block h-3 w-3 rounded-full border-2 border-current border-t-transparent"
+                />
+                Guardando
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                Guardar
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </span>
+            )}
+          </button>
+        </div>
+
+        {error && (
+          <div className="px-5 pb-3 text-xs text-red-500 dark:text-red-400">{error}</div>
+        )}
+      </form>
+    </motion.div>
+  )
+}
+
+// ── DashboardClient ───────────────────────────────────────────────────────────
+
 export function DashboardClient() {
-  const [gastos, setGastos]           = useState<Gasto[]>([])
-  const [cuentas, setCuentas]         = useState<Cuenta[]>([])
-  const [loading, setLoading]         = useState(false)
-  const [submitting, setSubmitting]   = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [inputText, setInputText]     = useState("")
-  const [tipo, setTipo]               = useState("Gasto")
-  const [inputDate, setInputDate]     = useState("")
-  const [monthOffset, setMonthOffset] = useState(0)
+  const [gastos, setGastos]               = useState<Gasto[]>([])
+  const [cuentas, setCuentas]             = useState<Cuenta[]>([])
+  const [loading, setLoading]             = useState(false)
+  const [monthOffset, setMonthOffset]     = useState(0)
   const [selectedCuenta, setSelectedCuenta] = useState("")
+  const [error, setError]                 = useState<string | null>(null)
 
-  const [modal, setModal]             = useState<"none" | "add" | "edit">("none")
+  const [modal, setModal]                 = useState<"none" | "add" | "edit">("none")
   const [editingCuenta, setEditingCuenta] = useState<Cuenta | null>(null)
-  const [cuentaForm, setCuentaForm]   = useState(EMPTY_FORM)
-  const [savingCuenta, setSavingCuenta] = useState(false)
-  const [cuentaError, setCuentaError] = useState<string | null>(null)
-
+  const [cuentaForm, setCuentaForm]       = useState(EMPTY_FORM)
+  const [savingCuenta, setSavingCuenta]   = useState(false)
+  const [cuentaError, setCuentaError]     = useState<string | null>(null)
   const [markingTransfer, setMarkingTransfer] = useState<string | null>(null)
+
+  const isDark    = useDarkMode()
+  const tickColor = isDark ? "#4f5769" : "#9ca3af"
+  const gridColor = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"
 
   const { data: session } = useSession()
   const userName = session?.user?.name?.split(" ")[0] ?? "Lucas"
@@ -144,36 +503,39 @@ export function DashboardClient() {
     if (res.ok) setCuentas(await res.json())
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!inputText.trim() || !selectedCuenta) return
-    setSubmitting(true); setError(null)
-    try {
-      const body: Record<string, string> = { raw: inputText.trim(), tipo, cuenta_id: selectedCuenta }
-      if (inputDate) body.created_at = new Date(inputDate).toISOString()
-      const res = await fetch("/api/gastos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "No se pudo guardar")
-      setInputText(""); setInputDate("")
-      await Promise.all([fetchAll(), fetchCuentas()])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error inesperado")
-    } finally { setSubmitting(false) }
+  // Called by SmartInput when user submits
+  async function handleSubmitTransaction(
+    text: string, tipo: string, cuentaId: string, date?: string,
+  ): Promise<void> {
+    setError(null)
+    const body: Record<string, string> = { raw: text, tipo, cuenta_id: cuentaId }
+    if (date) body.created_at = new Date(date).toISOString()
+    const res = await fetch("/api/gastos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "No se pudo guardar")
+    await Promise.all([fetchAll(), fetchCuentas()])
   }
 
   async function markTransfer(gastoId: string, ingresoId: string) {
     setMarkingTransfer(gastoId)
     try {
       await Promise.all([
-        fetch(`/api/gastos/${gastoId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ es_transferencia: 1 }) }),
+        fetch(`/api/gastos/${gastoId}`,  { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ es_transferencia: 1 }) }),
         fetch(`/api/gastos/${ingresoId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ es_transferencia: 1 }) }),
       ])
       await fetchAll()
     } finally { setMarkingTransfer(null) }
   }
 
-  function openAdd() { setCuentaForm(EMPTY_FORM); setCuentaError(null); setModal("add") }
-  function openEdit(c: Cuenta) { setCuentaForm({ banco: c.banco, tipo: c.tipo, moneda: c.moneda, saldo_inicial: String(c.saldo_inicial), nombre: c.nombre }); setCuentaError(null); setEditingCuenta(c); setModal("edit") }
-  function closeModal() { setModal("none"); setEditingCuenta(null) }
+  function openAdd()     { setCuentaForm(EMPTY_FORM); setCuentaError(null); setModal("add") }
+  function openEdit(c: Cuenta) {
+    setCuentaForm({ banco: c.banco, tipo: c.tipo, moneda: c.moneda, saldo_inicial: String(c.saldo_inicial), nombre: c.nombre })
+    setCuentaError(null); setEditingCuenta(c); setModal("edit")
+  }
+  function closeModal()  { setModal("none"); setEditingCuenta(null) }
 
   function autoNombre(f: typeof EMPTY_FORM) {
     if (f.nombre.trim()) return f.nombre.trim()
@@ -183,17 +545,24 @@ export function DashboardClient() {
   async function handleSaveCuenta() {
     setSavingCuenta(true); setCuentaError(null)
     try {
-      const saldo = parseFloat(cuentaForm.saldo_inicial) || 0
+      const saldo  = parseFloat(cuentaForm.saldo_inicial) || 0
       const nombre = autoNombre(cuentaForm)
       if (modal === "add") {
-        const res = await fetch("/api/cuentas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...cuentaForm, nombre, saldo_inicial: saldo }) })
+        const res = await fetch("/api/cuentas", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cuentaForm, nombre, saldo_inicial: saldo }),
+        })
         if (!res.ok) throw new Error((await res.json()).error || "Error al crear")
       } else if (modal === "edit" && editingCuenta) {
-        const res = await fetch(`/api/cuentas/${editingCuenta.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...cuentaForm, nombre, saldo_inicial: saldo }) })
+        const res = await fetch(`/api/cuentas/${editingCuenta.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cuentaForm, nombre, saldo_inicial: saldo }),
+        })
         if (!res.ok) throw new Error((await res.json()).error || "Error al guardar")
       }
       await fetchCuentas(); closeModal()
-    } catch (err) { setCuentaError(err instanceof Error ? err.message : "Error inesperado")
+    } catch (err) {
+      setCuentaError(err instanceof Error ? err.message : "Error inesperado")
     } finally { setSavingCuenta(false) }
   }
 
@@ -203,13 +572,15 @@ export function DashboardClient() {
     setSavingCuenta(true)
     try {
       await fetch(`/api/cuentas/${editingCuenta.id}`, { method: "DELETE" })
-      if (selectedCuenta === editingCuenta.id) setSelectedCuenta(cuentas.find(c => c.id !== editingCuenta.id)?.id ?? "")
+      if (selectedCuenta === editingCuenta.id)
+        setSelectedCuenta(cuentas.find(c => c.id !== editingCuenta.id)?.id ?? "")
       await fetchCuentas(); closeModal()
     } finally { setSavingCuenta(false) }
   }
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  const realGastos = useMemo(() => gastos.filter(g => !g.es_transferencia), [gastos])
+
+  const realGastos = gastos.filter(g => !g.es_transferencia)
 
   const refMonth = useMemo(() => {
     const now = new Date()
@@ -218,11 +589,12 @@ export function DashboardClient() {
 
   const monthLabel = useMemo(
     () => refMonth.toLocaleDateString("es-UY", { month: "long", year: "numeric" }),
-    [refMonth]
+    [refMonth],
   )
 
   const monthGastos = useMemo(() => {
-    const from = refMonth, to = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 1)
+    const from = refMonth
+    const to   = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 1)
     return realGastos.filter(g => {
       const t = new Date(g.created_at).getTime()
       return t >= from.getTime() && t < to.getTime()
@@ -236,38 +608,26 @@ export function DashboardClient() {
     return { ingresos, gastos: gastosMes, ahorros, balance: ingresos - gastosMes }
   }, [monthGastos])
 
-  // ── Health score ──────────────────────────────────────────────────────────
   const health = useMemo(() => {
     const now = new Date()
-    const last3 = realGastos.filter(g => new Date(g.created_at) >= new Date(now.getFullYear(), now.getMonth() - 2, 1))
+    const last3 = realGastos.filter(
+      g => new Date(g.created_at) >= new Date(now.getFullYear(), now.getMonth() - 2, 1),
+    )
     const last3Gastos   = last3.filter(g => g.tipo === "Gasto").reduce((s, g) => s + g.monto, 0)
     const last3Ingresos = last3.filter(g => g.tipo === "Ingreso").reduce((s, g) => s + g.monto, 0)
-
     if (last3.length === 0) return null
 
-    // 1. Savings rate (0-40)
-    const savingsRate = last3Ingresos > 0 ? (last3Ingresos - last3Gastos) / last3Ingresos : -1
-    const savingsScore =
-      savingsRate >= 0.30 ? 40 : savingsRate >= 0.20 ? 32 : savingsRate >= 0.10 ? 22 :
-      savingsRate >= 0.05 ? 12 : savingsRate >= 0 ? 5 : 0
+    const savingsRate  = last3Ingresos > 0 ? (last3Ingresos - last3Gastos) / last3Ingresos : -1
+    const savingsScore = savingsRate >= 0.30 ? 40 : savingsRate >= 0.20 ? 32 : savingsRate >= 0.10 ? 22 : savingsRate >= 0.05 ? 12 : savingsRate >= 0 ? 5 : 0
+    const balanceScore = last3Ingresos > last3Gastos ? 30 : last3Gastos / last3Ingresos < 1.05 ? 15 : last3Gastos / last3Ingresos < 1.15 ? 8 : 0
 
-    // 2. Balance (0-30)
-    const balanceScore =
-      last3Ingresos > last3Gastos ? 30 :
-      last3Gastos / last3Ingresos < 1.05 ? 15 :
-      last3Gastos / last3Ingresos < 1.15 ? 8 : 0
-
-    // 3. Category concentration (0-20)
     const catTotals: Record<string, number> = {}
     last3.filter(g => g.tipo === "Gasto").forEach(g => { catTotals[g.categoria] = (catTotals[g.categoria] || 0) + g.monto })
-    const topPct = last3Gastos > 0 ? Math.max(...Object.values(catTotals)) / last3Gastos : 0
-    const catScore = topPct < 0.30 ? 20 : topPct < 0.50 ? 14 : topPct < 0.70 ? 7 : 2
-
-    // 4. Data coverage (0-10)
-    const months = new Set(realGastos.map(g => g.created_at.slice(0, 7))).size
+    const topPct    = last3Gastos > 0 ? Math.max(...Object.values(catTotals)) / last3Gastos : 0
+    const catScore  = topPct < 0.30 ? 20 : topPct < 0.50 ? 14 : topPct < 0.70 ? 7 : 2
+    const months    = new Set(realGastos.map(g => g.created_at.slice(0, 7))).size
     const dataScore = months >= 3 ? 10 : months === 2 ? 7 : months === 1 ? 4 : 1
-
-    const score = savingsScore + balanceScore + catScore + dataScore
+    const score     = savingsScore + balanceScore + catScore + dataScore
 
     const recs: string[] = []
     if (savingsRate < 0.10) recs.push("Intentá ahorrar al menos el 10% de tus ingresos cada mes.")
@@ -279,17 +639,12 @@ export function DashboardClient() {
     if (recs.length === 0) recs.push("Vas muy bien. Mantené el ritmo de ahorro.")
 
     return {
-      score,
-      savingsScore, savingsMax: 40,
-      balanceScore, balanceMax: 30,
-      catScore,    catMax: 20,
-      dataScore,   dataMax: 10,
-      savingsRate: Math.round(savingsRate * 100),
-      rec: recs[0],
+      score, savingsScore, savingsMax: 40, balanceScore, balanceMax: 30,
+      catScore, catMax: 20, dataScore, dataMax: 10,
+      savingsRate: Math.round(savingsRate * 100), rec: recs[0],
     }
   }, [realGastos])
 
-  // ── Subscriptions detection ───────────────────────────────────────────────
   const subscriptions = useMemo(() => {
     const gastoItems = realGastos.filter(g => g.tipo === "Gasto")
     const groups: Record<string, Gasto[]> = {}
@@ -298,16 +653,13 @@ export function DashboardClient() {
       if (!groups[key]) groups[key] = []
       groups[key].push(g)
     })
-
     const subs: { name: string; avgMonto: number; freq: string; lastDate: string; nextDate: string; count: number }[] = []
-
     for (const [name, items] of Object.entries(groups)) {
       if (items.length < 2) continue
-      const sorted = [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      const sorted  = [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       const amounts = sorted.map(i => i.monto)
-      const avg = amounts.reduce((s, a) => s + a, 0) / amounts.length
+      const avg     = amounts.reduce((s, a) => s + a, 0) / amounts.length
       if (!amounts.every(a => Math.abs(a - avg) / avg < 0.30)) continue
-
       const intervals: number[] = []
       for (let i = 1; i < sorted.length; i++) {
         intervals.push((new Date(sorted[i].created_at).getTime() - new Date(sorted[i - 1].created_at).getTime()) / 86400000)
@@ -317,22 +669,18 @@ export function DashboardClient() {
         : avgInterval >= 5 && avgInterval <= 9 ? "Semanal"
         : avgInterval >= 55 && avgInterval <= 70 ? "Bimestral" : null
       if (!freq) continue
-
       const last = sorted[sorted.length - 1]
       const next = new Date(new Date(last.created_at).getTime() + avgInterval * 86400000)
       subs.push({ name, avgMonto: avg, freq, lastDate: last.created_at, nextDate: next.toISOString(), count: items.length })
     }
-
     return subs.sort((a, b) => b.avgMonto - a.avgMonto).slice(0, 6)
   }, [realGastos])
 
-  // ── Internal transfer detection ───────────────────────────────────────────
   const suspectedTransfers = useMemo(() => {
     if (cuentas.length < 2) return []
-    const outgoing = gastos.filter(g => g.tipo === "Gasto" && g.cuenta_id && !g.es_transferencia)
+    const outgoing = gastos.filter(g => g.tipo === "Gasto"   && g.cuenta_id && !g.es_transferencia)
     const incoming = gastos.filter(g => g.tipo === "Ingreso" && g.cuenta_id && !g.es_transferencia)
     const pairs: { gasto: Gasto; ingreso: Gasto; fromCuenta: Cuenta; toCuenta: Cuenta }[] = []
-
     for (const gasto of outgoing) {
       for (const ingreso of incoming) {
         if (gasto.cuenta_id === ingreso.cuenta_id) continue
@@ -344,39 +692,10 @@ export function DashboardClient() {
         if (from && to) pairs.push({ gasto, ingreso, fromCuenta: from, toCuenta: to })
       }
     }
-
-    // Deduplicate: one pair per gasto ID
     const seen = new Set<string>()
     return pairs.filter(p => { if (seen.has(p.gasto.id)) return false; seen.add(p.gasto.id); return true }).slice(0, 5)
   }, [gastos, cuentas])
 
-  // ── Insights ──────────────────────────────────────────────────────────────
-  const insights = useMemo(() => {
-    const now = new Date()
-    const list: { label: string; value: string; sub?: string; positive?: boolean }[] = []
-    const prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const prevTo   = new Date(now.getFullYear(), now.getMonth(), 1)
-    const prevTotal = realGastos
-      .filter(g => g.tipo === "Gasto" && new Date(g.created_at) >= prevFrom && new Date(g.created_at) < prevTo)
-      .reduce((s, g) => s + g.monto, 0)
-
-    if (prevTotal > 0 && stats.gastos > 0) {
-      const pct = Math.round(((stats.gastos - prevTotal) / prevTotal) * 100)
-      list.push({ label: "vs. mes anterior", value: `${pct > 0 ? "+" : ""}${pct}% en gastos`, positive: pct <= 0 })
-    }
-    const catTotals: Record<string, number> = {}
-    monthGastos.filter(g => g.tipo === "Gasto").forEach(g => { catTotals[g.categoria] = (catTotals[g.categoria] || 0) + g.monto })
-    const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]
-    if (topCat && stats.gastos > 0)
-      list.push({ label: "Categoría principal", value: topCat[0], sub: `${Math.round((topCat[1] / stats.gastos) * 100)}% del total`, positive: true })
-    if (stats.ingresos > 0) {
-      const rate = Math.round(((stats.ingresos - stats.gastos) / stats.ingresos) * 100)
-      list.push({ label: "Tasa de ahorro", value: `${Math.max(0, rate)}%`, sub: "del ingreso mensual", positive: rate >= 20 })
-    }
-    return list
-  }, [realGastos, monthGastos, stats])
-
-  // ── Other computed ────────────────────────────────────────────────────────
   const categoryData = useMemo(() => {
     const totals: Record<string, number> = {}
     monthGastos.filter(g => g.tipo === "Gasto").forEach(g => {
@@ -404,24 +723,33 @@ export function DashboardClient() {
   }, [realGastos])
 
   const recent = useMemo(
-    () => [...gastos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8),
-    [gastos]
+    () => [...gastos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 10),
+    [gastos],
   )
 
-  const totalUY = useMemo(
-    () => cuentas.filter(c => c.moneda === "UY").reduce((s, c) => s + c.saldo_actual, 0),
-    [cuentas]
-  )
-  const totalUSD = useMemo(
-    () => cuentas.filter(c => c.moneda === "USD").reduce((s, c) => s + c.saldo_actual, 0),
-    [cuentas]
-  )
+  const totalUY  = cuentas.filter(c => c.moneda === "UY").reduce((s, c) => s + c.saldo_actual, 0)
+  const totalUSD = cuentas.filter(c => c.moneda === "USD").reduce((s, c) => s + c.saldo_actual, 0)
+
   const greeting = useMemo(() => {
     const h = new Date().getHours()
     return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"
   }, [])
 
+  // month-vs-prev insight (for hero badge)
+  const vsAnterior = useMemo(() => {
+    const now = new Date()
+    const prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const prevTo   = new Date(now.getFullYear(), now.getMonth(), 1)
+    const prevTotal = realGastos
+      .filter(g => g.tipo === "Gasto" && new Date(g.created_at) >= prevFrom && new Date(g.created_at) < prevTo)
+      .reduce((s, g) => s + g.monto, 0)
+    if (prevTotal === 0 || stats.gastos === 0) return null
+    const pct = Math.round(((stats.gastos - prevTotal) / prevTotal) * 100)
+    return { pct, positive: pct <= 0 }
+  }, [realGastos, stats.gastos])
+
   // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-5">
 
@@ -432,124 +760,155 @@ export function DashboardClient() {
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="mac-card overflow-hidden"
       >
-        <div className="p-6 lg:p-8">
+        <div className="p-5 lg:p-7">
+          {/* Top row: balance + health indicator */}
           <div className="flex items-start justify-between mb-5">
             <div className="min-w-0 flex-1">
-              <p className="mb-1.5 text-sm text-slate-500 dark:text-slate-400">{greeting}, {userName}</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                {greeting}, {userName}
+              </p>
               <div className="flex flex-wrap items-baseline gap-3">
                 {loading ? (
-                  <div className="skeleton h-12 w-52" />
+                  <div className="skeleton h-11 w-48" />
                 ) : (
-                  <span className="text-5xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white">
+                  <span className="text-4xl font-bold tabular-nums tracking-tight text-slate-900 dark:text-white">
                     ${fmtDec(totalUY)}
                   </span>
                 )}
-                {!loading && insights.length > 0 && (
-                  <span className={`rounded-full px-2.5 py-1 text-sm font-medium ${
-                    insights[0].positive
+                {!loading && vsAnterior !== null && (
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    vsAnterior.positive
                       ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400"
-                      : "bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-400"
+                      : "bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400"
                   }`}>
-                    {insights[0].value}
+                    {vsAnterior.pct > 0 ? "+" : ""}{vsAnterior.pct}% vs mes anterior
                   </span>
                 )}
               </div>
-              <p className="mt-1.5 text-sm text-slate-400 dark:text-slate-500">
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                 Balance pesos · <span className="capitalize">{monthLabel}</span>
                 {totalUSD !== 0 && (
-                  <span className="ml-2 text-slate-300 dark:text-slate-600">
-                    · U$S {fmtDec(Math.abs(totalUSD))} USD
-                  </span>
+                  <span className="ml-2 opacity-60">· U$S {fmtDec(Math.abs(totalUSD))}</span>
                 )}
               </p>
             </div>
+
+            {/* Health score compact */}
             {!loading && health && (
-              <div className="ml-6 hidden shrink-0 flex-col items-center gap-0.5 sm:flex">
-                <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{health.score}</p>
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500">/100</p>
-                <p className="mt-0.5 text-[10px] font-semibold" style={{
-                  color: health.score >= 80 ? "#22c55e" : health.score >= 65 ? "#4a7d5a" : health.score >= 45 ? "#d4a843" : "#ef4444"
-                }}>Salud</p>
+              <div className="ml-5 hidden shrink-0 items-center gap-3 sm:flex">
+                <div className="text-right">
+                  <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white leading-none">{health.score}</p>
+                  <p className="text-[9px] uppercase tracking-widest text-slate-400 dark:text-slate-500 mt-0.5">/100 salud</p>
+                </div>
+                <div className="h-10 w-1 rounded-full" style={{
+                  background: health.score >= 80 ? "#22c55e" : health.score >= 65 ? "#4a7d5a" : health.score >= 45 ? "#d4a843" : "#ef4444"
+                }} />
               </div>
             )}
           </div>
 
+          {/* Metrics strip + month nav */}
           {!loading && (stats.ingresos > 0 || stats.gastos > 0) && (
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-                <div>
-                  <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">Ingresos</p>
-                  <p className="tabular-nums text-sm font-semibold text-emerald-700 dark:text-emerald-300">${fmt(stats.ingresos)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg border border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-3 py-2">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <div>
-                  <p className="text-[10px] font-medium text-red-600 dark:text-red-400">Gastos</p>
-                  <p className="tabular-nums text-sm font-semibold text-red-700 dark:text-red-300">${fmt(stats.gastos)}</p>
-                </div>
-              </div>
-              {stats.ahorros > 0 && (
-                <div className="flex items-center gap-2 rounded-lg border border-blue-100 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/40 px-3 py-2">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <div className="border-t border-black/[0.05] dark:border-white/[0.05] pt-4">
+              <div className="flex flex-wrap items-center gap-0">
+                {/* Ingresos */}
+                <div className="flex items-center gap-2.5 pb-3 sm:pb-0 sm:pr-6">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(34,197,94,0.12)" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+                  </div>
                   <div>
-                    <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400">Ahorros</p>
-                    <p className="tabular-nums text-sm font-semibold text-blue-700 dark:text-blue-300">${fmt(stats.ahorros)}</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-[#4f5769]">Ingresos</p>
+                    <p className="tabular-nums text-sm font-bold text-slate-700 dark:text-slate-200">${fmt(stats.ingresos)}</p>
                   </div>
                 </div>
-              )}
-              {stats.ingresos > 0 && (
-                <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-                  stats.balance >= 0
-                    ? "border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50"
-                    : "border-red-100 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40"
-                }`}>
+
+                <div className="hidden sm:block h-8 w-px bg-black/[0.05] dark:bg-white/[0.05] mx-0" />
+
+                {/* Gastos */}
+                <div className="flex items-center gap-2.5 pb-3 sm:pb-0 sm:px-6">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(239,68,68,0.12)" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
                   <div>
-                    <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Cashflow</p>
-                    <p className={`tabular-nums text-sm font-semibold ${
-                      stats.balance >= 0
-                        ? "text-slate-700 dark:text-slate-300"
-                        : "text-red-700 dark:text-red-400"
-                    }`}>
-                      {stats.balance >= 0 ? "+" : ""}{fmt(stats.balance)}
-                    </p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-[#4f5769]">Gastos</p>
+                    <p className="tabular-nums text-sm font-bold text-slate-700 dark:text-slate-200">${fmt(stats.gastos)}</p>
                   </div>
                 </div>
-              )}
+
+                {stats.ahorros > 0 && (
+                  <>
+                    <div className="hidden sm:block h-8 w-px bg-black/[0.05] dark:bg-white/[0.05] mx-0" />
+                    <div className="flex items-center gap-2.5 pb-3 sm:pb-0 sm:px-6">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(59,130,246,0.12)" }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-[#4f5769]">Ahorros</p>
+                        <p className="tabular-nums text-sm font-bold text-slate-700 dark:text-slate-200">${fmt(stats.ahorros)}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {stats.ingresos > 0 && (
+                  <>
+                    <div className="hidden sm:block h-8 w-px bg-black/[0.05] dark:bg-white/[0.05] mx-0" />
+                    <div className="flex items-center gap-2.5 sm:pl-6">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                        style={{ background: stats.balance >= 0 ? "rgba(100,116,139,0.10)" : "rgba(239,68,68,0.10)" }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                          stroke={stats.balance >= 0 ? "#64748b" : "#ef4444"}
+                          strokeWidth="2.5" strokeLinecap="round">
+                          <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                          <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-[#4f5769]">Cashflow</p>
+                        <p className={`tabular-nums text-sm font-bold ${
+                          stats.balance >= 0 ? "text-slate-700 dark:text-slate-200" : "text-red-500"
+                        }`}>
+                          {stats.balance >= 0 ? "+" : ""}{fmt(stats.balance)}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Month nav pushed to end */}
+                <div className="ml-auto flex items-center gap-1 pl-4">
+                  <button onClick={() => setMonthOffset(o => o - 1)}
+                    className="rounded-lg p-1.5 text-slate-400 dark:text-slate-500 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <button onClick={() => setMonthOffset(0)}
+                    className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors capitalize">
+                    {monthOffset === 0 ? "Hoy" : monthLabel.split(" ")[0]}
+                  </button>
+                  <button onClick={() => setMonthOffset(o => o + 1)}
+                    className="rounded-lg p-1.5 text-slate-400 dark:text-slate-500 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </motion.div>
 
-      {/* Month nav */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 capitalize">
-          {monthLabel}
-        </h3>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setMonthOffset(o => o - 1)} className="rounded-lg p-2 text-slate-400 dark:text-slate-500 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-          <button onClick={() => setMonthOffset(0)} className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">Hoy</button>
-          <button onClick={() => setMonthOffset(o => o + 1)} className="rounded-lg p-2 text-slate-400 dark:text-slate-500 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-        </div>
-      </div>
-
-      {/* ── Mis Cuentas ── */}
+      {/* ── Account cards ── */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Cuentas</h3>
-          <button onClick={openAdd} className="flex items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 transition-all hover:border-slate-200 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-800">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Cuentas</h3>
+          <button onClick={openAdd}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-[#1a1d2e] border border-transparent hover:border-black/[0.06] dark:hover:border-white/[0.06] transition-all">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Agregar
           </button>
         </div>
         {loading ? (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-28" />)}
+            {[1, 2, 3, 4].map(i => <div key={i} className="skeleton h-36" />)}
           </div>
         ) : (
           <motion.div
@@ -559,44 +918,44 @@ export function DashboardClient() {
             className="grid grid-cols-2 gap-3 lg:grid-cols-4"
           >
             {cuentas.map(c => {
-              const accentColor = BANK_ACCENTS[c.banco] ?? "#64748b"
+              const [gradFrom, gradTo] = bankGradient(c.banco)
               const isNeg = c.saldo_actual < 0
               return (
                 <motion.button
                   key={c.id}
                   variants={{
-                    hidden: { opacity: 0, y: 10 },
-                    show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+                    hidden: { opacity: 0, y: 12 },
+                    show:   { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] } },
                   }}
-                  whileHover={{ scale: 1.02, transition: { duration: 0.15 } }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.02, y: -3, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => openEdit(c)}
-                  className="group relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 text-left shadow-sm transition-shadow duration-200 hover:shadow-md"
+                  className="group relative overflow-hidden rounded-[20px] text-left"
+                  style={{
+                    background: `linear-gradient(145deg, ${gradFrom} 0%, ${gradTo} 100%)`,
+                    minHeight: "148px",
+                    boxShadow: `0 8px 24px -4px ${gradTo}55, 0 2px 6px rgba(0,0,0,0.15)`,
+                  }}
                 >
-                  <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: accentColor }} />
-
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full" style={{ background: accentColor }} />
-                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        {c.banco}
-                      </span>
-                    </div>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                      className="text-slate-300 dark:text-slate-600 opacity-0 transition-opacity group-hover:opacity-100">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
+                  <div className="absolute inset-x-0 top-0 h-2/3 bg-gradient-to-b from-white/[0.14] to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                    style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E\")" }}
+                  />
+                  <div className="absolute top-4 right-4"><BankMark banco={c.banco} /></div>
+                  <div className="absolute top-4 left-5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <span className="text-[9px] font-semibold text-white/40 uppercase tracking-[0.15em]">editar</span>
                   </div>
-
-                  <p className={`text-xl font-bold tabular-nums tracking-tight leading-none ${
-                    isNeg ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-white"
-                  }`}>
-                    {c.moneda === "USD" ? "U$S" : "$"}{fmtDec(Math.abs(c.saldo_actual))}
-                  </p>
-                  <p className="mt-1.5 truncate text-xs text-slate-400 dark:text-slate-500">
-                    {c.tipo === "Caja de Ahorro" ? "CA" : c.tipo} · {c.moneda === "USD" ? "Dólares" : "Pesos"}
-                  </p>
+                  <div className="absolute inset-x-0 bottom-0 p-5">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/40 mb-1.5">
+                      {c.banco} · {c.moneda === "USD" ? "USD" : "Pesos"}
+                    </p>
+                    <p className={`text-2xl font-bold tabular-nums tracking-tight leading-none ${isNeg ? "text-red-300/90" : "text-white"}`}>
+                      {c.moneda === "USD" ? "U$S " : "$"}{fmtDec(Math.abs(c.saldo_actual))}
+                    </p>
+                    <p className="text-[10px] text-white/30 mt-1.5 truncate">
+                      {c.tipo === "Caja de Ahorro" ? "Caja de Ahorro" : c.tipo}
+                    </p>
+                  </div>
                 </motion.button>
               )
             })}
@@ -604,146 +963,228 @@ export function DashboardClient() {
         )}
       </div>
 
-      {/* ── Stats + Health Score ── */}
-      {loading ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[1,2,3,4].map(i => <div key={i} className="skeleton h-24"/>)}</div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="mac-card p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Ingresos</p>
-            <p className="mt-2 text-2xl font-semibold text-green-600">${fmt(stats.ingresos)}</p>
-          </div>
-          <div className="mac-card p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Gastos</p>
-            <p className="mt-2 text-2xl font-semibold text-red-600">${fmt(stats.gastos)}</p>
-          </div>
-          <div className="mac-card p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Ahorros</p>
-            <p className="mt-2 text-2xl font-semibold text-blue-600">${fmt(stats.ahorros)}</p>
-          </div>
-          <div className="mac-card p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Balance</p>
-            <p className={`mt-2 text-2xl font-semibold ${stats.balance >= 0 ? "text-green-600" : "text-red-600"}`}>${fmt(stats.balance)}</p>
-          </div>
-        </div>
-      )}
+      {/* ── Smart Input ── */}
+      <SmartInput
+        cuentas={cuentas}
+        selectedCuenta={selectedCuenta}
+        setSelectedCuenta={setSelectedCuenta}
+        onSubmit={handleSubmitTransaction}
+      />
 
-      {/* ── Insights ── */}
-      {!loading && insights.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {insights.map((ins, i) => (
-            <div key={i} className="mac-card flex items-center gap-4 px-4 py-3.5">
-              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${ins.positive ? "bg-green-100" : "bg-red-100"}`}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ins.positive ? "#16a34a" : "#dc2626"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  {ins.positive ? <polyline points="20 6 9 17 4 12"/> : <path d="M12 5v14M5 12h14"/>}
+      {/* ── Recent feed + Health (2-col) ── */}
+      <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
+
+        {/* Recent transactions */}
+        <div className="mac-card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-[#4f5769]">
+              Movimientos recientes
+            </p>
+            <span className="rounded-full bg-slate-100 dark:bg-[#1a1d2e] px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+              {recent.length}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="space-y-0 p-2">
+              {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton h-12 mb-1" />)}
+            </div>
+          ) : recent.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-12">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 dark:bg-[#1a1d2e]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs text-gray-400">{ins.label}</p>
-                <p className={`mt-0.5 text-sm font-semibold truncate ${ins.positive ? "text-green-700" : "text-red-700"}`}>{ins.value}</p>
-                {ins.sub && <p className="text-xs text-gray-400">{ins.sub}</p>}
-              </div>
+              <p className="text-xs text-slate-400 dark:text-[#4f5769]">Sin movimientos registrados</p>
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="divide-y divide-black/[0.03] dark:divide-white/[0.03]">
+              {recent.map((g, i) => {
+                const cuenta   = cuentas.find(c => c.id === g.cuenta_id)
+                const emoji    = catEmoji(g.categoria)
+                const isIncome = g.tipo === "Ingreso"
+                const isSaving = g.tipo === "Ahorro"
+                const isTransfer = !!g.es_transferencia
+                const dotColor  = isIncome ? "#22c55e" : isSaving ? "#3b82f6" : "#ef4444"
+                const amtColor  = isIncome ? "text-emerald-600 dark:text-emerald-400"
+                  : isSaving ? "text-blue-600 dark:text-blue-400"
+                  : "text-red-500 dark:text-red-400"
 
-      {/* ── Health Score + Subscriptions ── */}
-      {!loading && (health || subscriptions.length > 0) && (
-        <div className="grid gap-5 lg:grid-cols-2">
-
-          {/* Health score */}
-          {health && (
-            <div className="mac-card p-5">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Salud Financiera</p>
-              <div className="flex gap-5">
-                <ScoreRing score={health.score} />
-                <div className="flex-1 space-y-2.5">
-                  {[
-                    { label: "Ahorro", score: health.savingsScore, max: health.savingsMax },
-                    { label: "Balance", score: health.balanceScore, max: health.balanceMax },
-                    { label: "Concentración", score: health.catScore, max: health.catMax },
-                    { label: "Historial", score: health.dataScore, max: health.dataMax },
-                  ].map(m => (
-                    <div key={m.label}>
-                      <div className="mb-1 flex justify-between text-xs text-gray-500">
-                        <span>{m.label}</span>
-                        <span className="tabular-nums text-gray-400">{m.score}/{m.max}</span>
-                      </div>
-                      <MiniBar value={m.score} max={m.max}
-                        color={m.score / m.max >= 0.75 ? "#22c55e" : m.score / m.max >= 0.5 ? "#4a7d5a" : m.score / m.max >= 0.25 ? "#d4a843" : "#ef4444"}
-                      />
+                return (
+                  <motion.div
+                    key={g.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03, duration: 0.25, ease: "easeOut" }}
+                    className={`flex items-center gap-3 px-4 py-3 hover:bg-black/[0.015] dark:hover:bg-white/[0.02] transition-colors ${isTransfer ? "opacity-40" : ""}`}
+                  >
+                    {/* Emoji icon */}
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                      style={{ background: `${dotColor}14` }}>
+                      <span className="text-sm leading-none select-none">{isTransfer ? "⇄" : emoji}</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-              <p className="mt-4 rounded-xl bg-gray-50 px-3 py-2.5 text-xs text-gray-600 leading-relaxed">{health.rec}</p>
-            </div>
-          )}
 
-          {/* Subscriptions */}
-          {subscriptions.length > 0 && (
-            <div className="mac-card p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Gastos Recurrentes</p>
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">{subscriptions.length} detectados</span>
-              </div>
-              <div className="space-y-1">
-                {subscriptions.map((s, i) => {
-                  const nextDate = new Date(s.nextDate)
-                  const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / 86400000)
-                  return (
-                    <div key={i} className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-gray-50 transition-colors">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-800">{s.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {s.freq} · {s.count} ocurrencias
-                          {daysLeft > 0 && daysLeft <= 15 && <span className="ml-1 text-amber-600">· vence en {daysLeft}d</span>}
-                        </p>
-                      </div>
-                      <span className="ml-3 shrink-0 text-sm font-semibold text-gray-700 tabular-nums">~${fmt(s.avgMonto)}</span>
+                    {/* Content */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200 leading-tight">
+                        {g.categoria}{g.subcategoria ? ` · ${g.subcategoria}` : ""}
+                      </p>
+                      <p className="text-[10px] text-slate-400 dark:text-[#4f5769] mt-0.5 flex items-center gap-1.5">
+                        {new Date(g.created_at).toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit" })}
+                        {cuenta && (
+                          <>
+                            <span className="opacity-30">·</span>
+                            <span>{cuenta.banco}</span>
+                          </>
+                        )}
+                        {isTransfer && (
+                          <>
+                            <span className="opacity-30">·</span>
+                            <span className="rounded-sm bg-amber-50 dark:bg-amber-950/40 px-1 text-[8px] font-bold text-amber-600 dark:text-amber-400 uppercase">transf.</span>
+                          </>
+                        )}
+                      </p>
                     </div>
-                  )
-                })}
-              </div>
+
+                    {/* Amount */}
+                    <span className={`shrink-0 text-sm font-bold tabular-nums ${amtColor}`}>
+                      {isIncome ? "+" : "−"}{g.moneda === "USD" ? "U$S " : "$"}{fmt(g.monto)}
+                    </span>
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </div>
-      )}
+
+        {/* Health score */}
+        {!loading && health && (
+          <div className="mac-card p-5">
+            <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-[#4f5769]">
+              Salud financiera
+            </p>
+            <div className="flex gap-5">
+              <ScoreRing score={health.score} />
+              <div className="flex-1 space-y-2.5">
+                {[
+                  { label: "Ahorro",        score: health.savingsScore, max: health.savingsMax },
+                  { label: "Balance",       score: health.balanceScore, max: health.balanceMax },
+                  { label: "Concentración", score: health.catScore,     max: health.catMax },
+                  { label: "Historial",     score: health.dataScore,    max: health.dataMax },
+                ].map(m => (
+                  <div key={m.label}>
+                    <div className="mb-1 flex justify-between text-[10px] text-slate-500 dark:text-slate-500">
+                      <span>{m.label}</span>
+                      <span className="tabular-nums text-slate-400 dark:text-[#4f5769]">{m.score}/{m.max}</span>
+                    </div>
+                    <MiniBar value={m.score} max={m.max}
+                      color={m.score / m.max >= 0.75 ? "#22c55e" : m.score / m.max >= 0.5 ? "#4a7d5a" : m.score / m.max >= 0.25 ? "#d4a843" : "#ef4444"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="mt-4 rounded-xl bg-slate-50 dark:bg-[#0d0f1a] px-3 py-2.5 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+              {health.rec}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* ── Internal transfer alerts ── */}
       {!loading && suspectedTransfers.length > 0 && (
         <div className="mac-card overflow-hidden">
-          <div className="flex items-center gap-3 border-b border-black/[0.06] px-5 py-3.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex items-center gap-3 border-b border-black/[0.04] dark:border-white/[0.04] px-5 py-3.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-950/30">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               </svg>
             </div>
-            <p className="text-sm font-semibold text-gray-800">
-              {suspectedTransfers.length} posible{suspectedTransfers.length > 1 ? "s" : ""} transferencia{suspectedTransfers.length > 1 ? "s" : ""} interna{suspectedTransfers.length > 1 ? "s" : ""}
-            </p>
-            <p className="text-xs text-gray-400">Confirmalas para excluirlas de tus gastos reales</p>
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                {suspectedTransfers.length} posible{suspectedTransfers.length > 1 ? "s" : ""} transferencia{suspectedTransfers.length > 1 ? "s" : ""} interna{suspectedTransfers.length > 1 ? "s" : ""}
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-[#4f5769]">Confirmalas para excluirlas de tus gastos reales</p>
+            </div>
           </div>
-          <div className="divide-y divide-black/[0.04]">
+          <div className="divide-y divide-black/[0.03] dark:divide-white/[0.03]">
             {suspectedTransfers.map((p, i) => (
               <div key={i} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-gray-700">
+                <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <span className="font-medium truncate">{p.fromCuenta.nombre}</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-300 dark:text-slate-600 shrink-0"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   <span className="font-medium truncate">{p.toCuenta.nombre}</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-900 tabular-nums">${fmt(p.gasto.monto)}</span>
-                <span className="text-xs text-gray-400">{new Date(p.gasto.created_at).toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit" })}</span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">${fmt(p.gasto.monto)}</span>
+                <span className="text-[11px] text-slate-400 dark:text-[#4f5769]">
+                  {new Date(p.gasto.created_at).toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit" })}
+                </span>
                 <button
                   onClick={() => markTransfer(p.gasto.id, p.ingreso.id)}
                   disabled={markingTransfer === p.gasto.id}
-                  className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                  className="rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors disabled:opacity-50"
                 >
-                  {markingTransfer === p.gasto.id ? "Marcando…" : "Confirmar transferencia"}
+                  {markingTransfer === p.gasto.id ? "Marcando…" : "Confirmar"}
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Subscriptions ── */}
+      {!loading && subscriptions.length > 0 && (
+        <div className="mac-card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-[#4f5769]">
+              Gastos recurrentes
+            </p>
+            <span className="rounded-full bg-slate-100 dark:bg-[#1a1d2e] px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+              {subscriptions.length}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 border-b border-black/[0.03] dark:border-white/[0.03] px-5 py-2">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-300 dark:text-[#2d3347]">Concepto</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-300 dark:text-[#2d3347] text-center pr-2">Frec.</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-300 dark:text-[#2d3347] text-right">Monto</p>
+          </div>
+
+          <div className="divide-y divide-black/[0.03] dark:divide-white/[0.03]">
+            {subscriptions.map((s, i) => {
+              const nextDate  = new Date(s.nextDate)
+              const daysLeft  = Math.ceil((nextDate.getTime() - Date.now()) / 86400000)
+              const isUrgent  = daysLeft > 0 && daysLeft <= 7
+              const isSoon    = daysLeft > 7 && daysLeft <= 15
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.04, duration: 0.3 }}
+                  className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-5 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-base select-none leading-none">{catEmoji(s.name)}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate leading-tight">{s.name}</p>
+                      {isUrgent && <p className="text-[9px] font-semibold text-red-500 mt-0.5">{daysLeft}d restantes</p>}
+                      {isSoon   && <p className="text-[9px] text-amber-500 mt-0.5">{daysLeft}d restantes</p>}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-[#1a1d2e] px-2.5 py-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                      {s.freq}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-300 text-right">
+                    ~${fmt(s.avgMonto)}
+                  </p>
+                </motion.div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -753,20 +1194,19 @@ export function DashboardClient() {
         <div className="mac-card p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Gastos</p>
-              <h3 className="text-base font-semibold text-gray-900">Por categoría</h3>
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-[#4f5769]">Por categoría</p>
+              <h3 className="mt-0.5 text-base font-semibold text-slate-900 dark:text-white capitalize">{monthLabel}</h3>
             </div>
-            <span className="text-xs text-gray-400 capitalize">{monthLabel}</span>
           </div>
           {categoryData.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">Sin datos</p>
+            <p className="py-8 text-center text-sm text-slate-400 dark:text-[#4f5769]">Sin datos este mes</p>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={categoryData} layout="vertical" margin={{ left: 0, right: 16 }}>
-                <CartesianGrid stroke="rgba(0,0,0,0.04)" horizontal={false} />
-                <XAxis type="number" tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${fmt(v)}`} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} width={110} />
-                <Tooltip formatter={(v: number) => [`$${fmt(v)}`, "Monto"]} contentStyle={{ background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, fontSize: 12 }} />
+                <CartesianGrid stroke={gridColor} horizontal={false} />
+                <XAxis type="number" tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${fmt(v)}`} />
+                <YAxis type="category" dataKey="name" tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} width={110} />
+                <Tooltip content={<ChartTooltip />} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {categoryData.map((_, i) => <Cell key={i} fill={CAT_COLORS[i % CAT_COLORS.length]} />)}
                 </Bar>
@@ -777,158 +1217,116 @@ export function DashboardClient() {
 
         <div className="mac-card p-5">
           <div className="mb-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Tendencia</p>
-            <h3 className="text-base font-semibold text-gray-900">Últimos 6 meses</h3>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-[#4f5769]">Tendencia</p>
+            <h3 className="mt-0.5 text-base font-semibold text-slate-900 dark:text-white">Últimos 6 meses</h3>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={trendData}>
-              <CartesianGrid stroke="rgba(0,0,0,0.04)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${fmt(v)}`} />
-              <Tooltip formatter={(v: number, name: string) => [`$${fmt(v)}`, name === "gastos" ? "Gastos" : "Ingresos"]} contentStyle={{ background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, fontSize: 12 }} />
+              <CartesianGrid stroke={gridColor} vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${fmt(v)}`} />
+              <Tooltip content={<ChartTooltip />} />
               <Line type="monotone" dataKey="ingresos" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: "#22c55e" }} />
-              <Line type="monotone" dataKey="gastos" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: "#ef4444" }} />
+              <Line type="monotone" dataKey="gastos"   stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: "#ef4444" }} />
             </LineChart>
           </ResponsiveContainer>
-          <div className="mt-3 flex gap-4 text-xs text-gray-500">
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-green-500"/>Ingresos</span>
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-red-500"/>Gastos</span>
+          <div className="mt-3 flex gap-4 text-xs text-slate-500 dark:text-slate-500">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500"/>Ingresos</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-red-500"/>Gastos</span>
           </div>
-        </div>
-      </div>
-
-      {/* ── Quick input + Recent ── */}
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
-        <div className="mac-card p-5">
-          <h3 className="mb-4 text-base font-semibold text-gray-900">Registrar movimiento</h3>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500">Cuenta</label>
-              <div className="flex flex-wrap gap-2">
-                {cuentas.map(c => {
-                  const col = bancoColor(c.banco)
-                  return (
-                    <button key={c.id} type="button" onClick={() => setSelectedCuenta(c.id)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${selectedCuenta === c.id ? `${col.bg} ${col.border} ${col.label}` : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"}`}>
-                      {c.nombre}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <input value={inputText} onChange={e => setInputText(e.target.value)} placeholder="Ej: pagué $419 de taxi, cobré $22813 de sueldo…" className="input-base" disabled={submitting} />
-            <div className="flex flex-wrap gap-2">
-              {["Gasto", "Ingreso", "Ahorro"].map(t => (
-                <button key={t} type="button" onClick={() => setTipo(t)}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${tipo === t ? t === "Gasto" ? "bg-red-500 text-white" : t === "Ingreso" ? "bg-green-500 text-white" : "bg-blue-500 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                  {t}
-                </button>
-              ))}
-              <input type="date" value={inputDate} onChange={e => setInputDate(e.target.value)} className="ml-auto rounded-lg border border-black/[0.08] bg-gray-50 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:border-sage-500/50" />
-            </div>
-            <button type="submit" disabled={submitting || !inputText.trim() || !selectedCuenta} className="btn-primary w-full">
-              {submitting ? "Guardando…" : "Guardar"}
-            </button>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-          </form>
-        </div>
-
-        <div className="mac-card p-5">
-          <h3 className="mb-4 text-base font-semibold text-gray-900">Recientes</h3>
-          {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="skeleton h-12"/>)}</div>
-          ) : recent.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">Sin movimientos</p>
-          ) : (
-            <div className="space-y-1">
-              {recent.map(g => {
-                const cuenta = cuentas.find(c => c.id === g.cuenta_id)
-                return (
-                  <div key={g.id} className={`flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-gray-50 transition-colors ${g.es_transferencia ? "opacity-50" : ""}`}>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-800">
-                        {g.es_transferencia && <span className="mr-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600">TRANSF.</span>}
-                        {g.categoria}{g.subcategoria ? ` · ${g.subcategoria}` : ""}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(g.created_at).toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit" })}
-                        {cuenta && <span className="ml-1 text-gray-300">· {cuenta.banco}</span>}
-                      </p>
-                    </div>
-                    <span className={`ml-3 shrink-0 text-sm font-semibold ${g.tipo === "Ingreso" ? "text-green-600" : g.tipo === "Ahorro" ? "text-blue-600" : "text-red-600"}`}>
-                      {g.tipo === "Ingreso" ? "+" : "-"}${fmt(g.monto)}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
       </div>
 
       {/* ── Account Modal ── */}
       {modal !== "none" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="mb-5 text-base font-semibold text-gray-900">{modal === "add" ? "Agregar producto" : "Editar cuenta"}</h3>
+          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-md" onClick={closeModal} />
+          <div className="relative w-full max-w-sm glass-panel p-6">
+            <h3 className="mb-5 text-base font-semibold text-slate-900 dark:text-white">
+              {modal === "add" ? "Agregar cuenta" : "Editar cuenta"}
+            </h3>
             <div className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">Banco / Institución</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Banco / Institución</label>
                 <div className="flex flex-wrap gap-2">
                   {BANCOS.map(b => (
                     <button key={b} type="button" onClick={() => setCuentaForm(f => ({ ...f, banco: b, nombre: "" }))}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${cuentaForm.banco === b ? `${bancoColor(b).bg} ${bancoColor(b).border} ${bancoColor(b).label}` : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"}`}>
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
+                        cuentaForm.banco === b
+                          ? `${bancoColor(b).bg} ${bancoColor(b).border} ${bancoColor(b).label}`
+                          : "bg-slate-50 dark:bg-[#1a1d2e] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-slate-400 hover:bg-slate-100"
+                      }`}>
                       {b}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">Tipo de producto</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Tipo de producto</label>
                 <div className="flex flex-wrap gap-2">
-                  {TIPOS.map(t => (
+                  {TIPOS_CA.map(t => (
                     <button key={t} type="button" onClick={() => setCuentaForm(f => ({ ...f, tipo: t, nombre: "" }))}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${cuentaForm.tipo === t ? "bg-gray-900 border-gray-900 text-white" : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"}`}>
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
+                        cuentaForm.tipo === t
+                          ? "bg-slate-900 dark:bg-amber-500 border-slate-900 dark:border-amber-500 text-white dark:text-slate-900"
+                          : "bg-slate-50 dark:bg-[#1a1d2e] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-slate-400 hover:bg-slate-100"
+                      }`}>
                       {t}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">Moneda</label>
+                <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Moneda</label>
                 <div className="flex gap-2">
                   {[{ v: "UY", label: "$ Pesos" }, { v: "USD", label: "U$S Dólares" }].map(({ v, label }) => (
                     <button key={v} type="button" onClick={() => setCuentaForm(f => ({ ...f, moneda: v, nombre: "" }))}
-                      className={`rounded-lg px-4 py-1.5 text-xs font-medium transition-all border ${cuentaForm.moneda === v ? "bg-gray-900 border-gray-900 text-white" : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"}`}>
+                      className={`rounded-lg px-4 py-1.5 text-xs font-medium transition-all border ${
+                        cuentaForm.moneda === v
+                          ? "bg-slate-900 dark:bg-amber-500 border-slate-900 dark:border-amber-500 text-white dark:text-slate-900"
+                          : "bg-slate-50 dark:bg-[#1a1d2e] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-slate-400 hover:bg-slate-100"
+                      }`}>
                       {label}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
                   {modal === "edit" ? "Saldo base" : "Saldo actual"}
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">{cuentaForm.moneda === "USD" ? "U$S" : "$"}</span>
-                  <input type="number" step="0.01" min="0" value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm(f => ({ ...f, saldo_inicial: e.target.value }))} className="input-base pl-9" placeholder="0" />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">
+                    {cuentaForm.moneda === "USD" ? "U$S" : "$"}
+                  </span>
+                  <input type="number" step="0.01" min="0" value={cuentaForm.saldo_inicial}
+                    onChange={e => setCuentaForm(f => ({ ...f, saldo_inicial: e.target.value }))}
+                    className="input-base pl-9" placeholder="0" />
                 </div>
-                <p className="mt-1 text-xs text-gray-400">
-                  {modal === "add" ? "Ingresá el saldo que tenés hoy. Se actualiza con cada movimiento que registrés." : "Ajusta el punto de partida. Los movimientos vinculados ya actualizan el saldo."}
+                <p className="mt-1 text-[11px] text-slate-400 dark:text-[#4f5769]">
+                  {modal === "add"
+                    ? "Ingresá el saldo actual. Se actualiza con cada movimiento."
+                    : "Ajusta el punto de partida. Los movimientos ya actualizan el saldo."}
                 </p>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-gray-500">Nombre (opcional)</label>
-                <input className="input-base" placeholder={autoNombre(cuentaForm)} value={cuentaForm.nombre} onChange={e => setCuentaForm(f => ({ ...f, nombre: e.target.value }))} />
+                <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Nombre (opcional)</label>
+                <input className="input-base" placeholder={autoNombre(cuentaForm)}
+                  value={cuentaForm.nombre} onChange={e => setCuentaForm(f => ({ ...f, nombre: e.target.value }))} />
               </div>
             </div>
-            {cuentaError && <p className="mt-3 text-sm text-red-600">{cuentaError}</p>}
+            {cuentaError && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{cuentaError}</p>}
             <div className="mt-5 flex gap-2">
               {modal === "edit" && (
-                <button onClick={handleDeleteCuenta} disabled={savingCuenta} className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 transition-all">Eliminar</button>
+                <button onClick={handleDeleteCuenta} disabled={savingCuenta}
+                  className="rounded-lg border border-red-200 dark:border-red-900/50 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all">
+                  Eliminar
+                </button>
               )}
-              <button onClick={closeModal} disabled={savingCuenta} className="flex-1 rounded-lg px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all">Cancelar</button>
+              <button onClick={closeModal} disabled={savingCuenta}
+                className="flex-1 rounded-lg bg-slate-100 dark:bg-[#1a1d2e] px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-[#232840] transition-all">
+                Cancelar
+              </button>
               <button onClick={handleSaveCuenta} disabled={savingCuenta} className="flex-1 btn-primary">
                 {savingCuenta ? "Guardando…" : modal === "add" ? "Agregar" : "Guardar"}
               </button>

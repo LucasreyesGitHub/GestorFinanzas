@@ -9,15 +9,29 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50:  "#f0fdf4",
-          100: "#dcfce7",
-          200: "#bbf7d0",
-          500: "#22c55e",
-          600: "#16a34a",
-          700: "#15803d",
-          900: "#14532d",
+        surface: {
+          0: "#0a0f1e",
+          1: "#111827",
+          2: "#1a2235",
+          3: "#1f2d42",
         },
+        accent: {
+          DEFAULT: "#10b981",
+          dim:     "#064e3b",
+          light:   "#34d399",
+        },
+        gold: "#f59e0b",
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+      },
+      boxShadow: {
+        glow:       "0 0 24px rgba(16,185,129,0.18)",
+        "glow-lg":  "0 0 48px rgba(16,185,129,0.12)",
+        card:       "0 1px 3px rgba(0,0,0,0.4)",
+      },
+      borderColor: {
+        subtle: "rgba(255,255,255,0.07)",
       },
     },
   },

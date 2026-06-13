@@ -4,18 +4,23 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 const links = [
-  { href: "/",      label: "Este mes",  icon: (active: boolean) => (
+  { href: "/",         label: "Este mes",  icon: (_active: boolean) => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
       <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
     </svg>
   )},
-  { href: "/mapa",  label: "Opciones",  icon: (active: boolean) => (
+  { href: "/historial", label: "Historial", icon: (_active: boolean) => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
     </svg>
   )},
-  { href: "/setup", label: "Perfil",    icon: (active: boolean) => (
+  { href: "/mapa",     label: "Opciones",  icon: (_active: boolean) => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/>
+    </svg>
+  )},
+  { href: "/setup",    label: "Perfil",    icon: (_active: boolean) => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
     </svg>
